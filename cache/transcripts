@@ -1,1 +1,11 @@
+if(fs.existsSync(`cache/transcripts/${videoId}.txt`)){
 
+console.log("Transcript already exists")
+
+const transcript = fs.readFileSync(
+`cache/transcripts/${videoId}.txt`,
+"utf8"
+)
+
+return transcript
+}
