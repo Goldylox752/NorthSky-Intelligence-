@@ -50,5 +50,23 @@ app.get('/rip', async (req, res) => {
     res.status(500).json({ error: 'Failed to rip metadata', details: error.message });
   }
 });
+// Load environment variables (e.g., using dotenv)
+const API_KEY = process.env.RIpper_API_KEY || 'your-super-secret-key';
+
+const authenticate = (req, res, next) => {
+  const userKey = req.headers['x-api-key'];
+  
+  if (userKey && userKey === API_KEY) {
+    return next(); // Key matches, proceed to the ripper logic
+  }
+  
+  // Unauthorized access
+  res.status(401).json({ error: 'Unauthorized: Invalid or missing API Key' });
+};
+
+// Apply to your specific route
+app.get('/rip', authenticate, async (req, res) => {
+  // Your existing rip/cache logic here...
+});
 
 app.listen(PORT, () => console.log(`Ripper API running on http://localhost:${PORT}`));
