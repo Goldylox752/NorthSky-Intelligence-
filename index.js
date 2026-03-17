@@ -68,5 +68,22 @@ const authenticate = (req, res, next) => {
 app.get('/rip', authenticate, async (req, res) => {
   // Your existing rip/cache logic here...
 });
+const rateLimit = require('express-rate-limit');
+const RedisStore = require('rate-limit-redis').default;
+
+const limiter = rateLimit({
+  // Use the existing Redis client
+  store: new RedisStore({
+    sendCommand: (...args) => redisClient.sendCommand(args),
+    prefix: 'ripper_limit:',
+  }),
+  windowMs: 15 * 60 * 1000, // 15-minute window
+  max: 100, // 100 requests per IP
+  standardHeaders: true, // Show rate limit info in headers
+  message: { error: 'Too many requests, please try again later.' },
+});
+
+// Apply to your rip route
+app.use('/rip', limiter);
 
 app.listen(PORT, () => console.log(`Ripper API running on http://localhost:${PORT}`));
