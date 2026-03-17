@@ -1,0 +1,10 @@
+// logger.js configuration
+const logger = winston.createLogger({
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json() // API can easily parse this
+  ),
+  transports: [
+    new winston.transports.File({ filename: 'audit.log' })
+  ]
+});
