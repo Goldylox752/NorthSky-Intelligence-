@@ -82,6 +82,32 @@ const limiter = rateLimit({
   standardHeaders: true, // Show rate limit info in headers
   message: { error: 'Too many requests, please try again later.' },
 });
+const rateLimit = require('express-rate-limit');
+const RedisStore = require('rate-limit-redis').default;
+
+// Configure the Rate Limiter
+const ripperLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // Limit each IP to 20 requests per window
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  
+  // Store the counters in Redis
+  store: new RedisStore({
+    sendCommand: (...args) => redisClient.sendCommand(args),
+    prefix: 'ripper_limit:', // Key prefix in Redis
+  }),
+  
+  message: {
+    error: 'Too many requests.',
+    message: 'You have exceeded the 20 requests per 15 minutes limit.'
+  }
+});
+
+// Apply the limiter specifically to your /rip route
+app.get('/rip', authenticate, ripperLimiter, async (req, res) => {
+  // ... your existing rip logic
+});
 
 // Apply to your rip route
 app.use('/rip', limiter);
