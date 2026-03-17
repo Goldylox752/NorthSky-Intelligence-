@@ -1,4 +1,8 @@
 version: '3.8'
+services:
+  api:
+    image: ghcr.io/your-username/meta-ripper:main
+    # ... rest of your config
 
 services:
   # The Express.js Ripper API
