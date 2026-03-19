@@ -10,7 +10,7 @@ heroku config:set SENTRY_DSN=$SENTRY_DSN
 
 # --- CONFIGURATION ---
 APP_NAME="my-ripper-engine-$(date +%s)" # Generates a unique name
-ADMIN_EMAIL="your-email@example.com"
+ADMIN_EMAIL="Goldylox752@zohomailcloud.caw"
 API_KEY="your-secret-key-123"
 
 echo "🚀 Starting Deployment for $APP_NAME..."
