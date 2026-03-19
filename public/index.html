@@ -88,6 +88,31 @@
         <pre id="jsonOutput" class="text-[11px] text-green-400 font-mono"></pre>
     </div>
 </div>
+<div class="flex gap-4">
+    <!-- Your existing search bar (flex-1) -->
+    <div class="w-64 bg-slate-900 border border-slate-700 rounded p-3 h-40 overflow-y-auto">
+        <p class="text-[10px] font-bold text-slate-500 uppercase mb-2">Worker Status</p>
+        <ul id="status-logs" class="text-[11px] font-mono space-y-1 text-blue-300">
+            <li>Ready for tasks...</li>
+        </ul>
+    </div>
+</div>
+
+<script>
+    socket.on('job-progress', (status) => {
+        const logList = document.getElementById('status-logs');
+        const newLog = document.createElement('li');
+        newLog.innerText = `> ${status}`;
+        logList.appendChild(newLog);
+        logList.scrollTop = logList.scrollHeight; // Auto-scroll to bottom
+    });
+    
+    // Clear logs when a new rip starts
+    function executeRip() {
+        document.getElementById('status-logs').innerHTML = '<li>Starting...</li>';
+        // ... rest of your executeRip code ...
+    }
+</script>
 
         <!-- Stats Grid -->
         <div id="stats" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 text-center">
