@@ -19,7 +19,42 @@
 </head>
 <body>
     <h1>Meta Ripper <span style="color: var(--accent)">Control Panel</span></h1>
+    async function executeRip() {
+    const url = document.getElementById('urlInput').value;
+    const btn = document.getElementById('ripBtn');
+    const preview = document.getElementById('resultPreview');
+    const output = document.getElementById('jsonOutput');
+    const badge = document.getElementById('sourceBadge');
+
+    if (!url) return alert("Please enter a URL");
+
+    // UI Loading State
+    btn.disabled = true;
+    btn.innerText = "RIPPING...";
     
+    try {
+        const res = await fetch(`/rip?url=${encodeURIComponent(url)}`);
+        const data = await res.json();
+
+        // Display Result
+        preview.classList.remove('hidden');
+        output.innerText = JSON.stringify(data, null, 2);
+        
+        // Style badge based on cache vs fresh
+        badge.innerText = data.source || 'Result';
+        badge.className = data.source === 'cache' 
+            ? 'text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-500' 
+            : 'text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-green-500/20 text-green-500';
+
+    } catch (err) {
+        alert("Rip failed. Check console for details.");
+    } finally {
+        btn.disabled = false;
+        btn.innerText = "RIP";
+        updateDashboard(); // Refresh stats to show new cached items
+    }
+}
+
     <div class="grid">
         <div class="card"><h3>Total Cached</h3><p id="stat-cached">0</p></div>
         <div class="card"><h3>System Uptime</h3><p id="stat-uptime">0h</p></div>
