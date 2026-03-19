@@ -113,3 +113,48 @@ const worker = new Worker('ripper-tasks', async (job) => {
 
   return result;
 }, { connection });
+const { Worker } = require('bullmq');
+const { connection } = require('./src/queue');
+const axios = require('axios');
+const nodemailer = require('nodemailer');
+const { HttpsProxyAgent } = require('https-proxy-agent');
+
+// 1. Email Config
+const transporter = nodemailer.createTransport({
+  service: 'SendGrid',
+  auth: { user: 'apikey', pass: process.env.SENDGRID_API_KEY }
+});
+
+// 2. The Worker Logic
+const worker = new Worker('ripper-tasks', async (job) => {
+  const { url } = job.data;
+  const proxy = process.env[`PROXY_${job.attemptsMade + 1}`];
+  const agent = proxy ? new HttpsProxyAgent(proxy) : null;
+
+  await job.updateProgress({ status: 'Scraping Metadata...' });
+
+  try {
+    // Simulated Rip (Replace with your metascraper logic)
+    const { data: html } = await axios.get(url, { httpsAgent: agent, timeout: 10000 });
+    const result = { title: "Extracted Title", url, source: proxy ? 'proxy' : 'direct' };
+
+    // Save to Cache
+    await connection.set(`result:${job.id}`, JSON.stringify(result), 'EX', 3600);
+    return result;
+  } catch (err) {
+    throw new Error(`Failed: ${err.message}`);
+  }
+}, { connection });
+
+// 3. Event Listeners (Email & Logs)
+worker.on('completed', async (job, result) => {
+  console.log(`Job ${job.id} Done`);
+  
+  // Notify Admin via Email
+  await transporter.sendMail({
+    from: '"Ripper" <alerts@you.com>',
+    to: process.env.ADMIN_EMAIL,
+    subject: `✅ Rip Success: ${job.id}`,
+    text: `View results for ${job.data.url}`
+  });
+});
