@@ -17,6 +17,13 @@ io.on('connection', (socket) => {
     console.log(`Socket ${socket.id} joined room job-${jobId}`);
   });
 });
+const { QueueEvents } = require('bullmq');
+const queueEvents = new QueueEvents('ripper-tasks', { connection });
+
+queueEvents.on('progress', ({ jobId, data }) => {
+  // 'data' is the object { status: "..." } from the worker
+  io.to(`job-${jobId}`).emit('job-progress', data.status);
+});
 
 // IMPORTANT: Export io so the worker or routes can use it
 module.exports = { app, server, io };
