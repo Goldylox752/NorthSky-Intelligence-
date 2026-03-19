@@ -3,6 +3,13 @@ const { HttpsProxyAgent } = require('https-proxy-agent');
 const transporter = require('./src/mailer');
 
 // ... your existing worker logic ...
+const axios = require('axios');
+
+worker.on('completed', async (job) => {
+  await axios.post(process.env.SLACK_WEBHOOK, {
+    text: `✅ *Rip Complete!* \n*URL:* ${job.data.url} \n*ID:* ${job.id}`
+  });
+});
 
 worker.on('completed', async (job) => {
   // Only send email for "massive" rips (e.g., if it took a long time or is a specific type)
