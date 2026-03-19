@@ -1,3 +1,9 @@
+const Sentry = require("@sentry/node");
+
+Sentry.init({
+  dsn: process.env.SENTRY_DSN, // You'll get this from Sentry.io
+  tracesSampleRate: 1.0,       // Adjust in production to save quota
+});
 const axios = require('axios');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const transporter = require('./src/mailer');
