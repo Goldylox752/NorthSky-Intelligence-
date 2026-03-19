@@ -69,6 +69,13 @@
         <tbody><!-- Logs injected here --></tbody>
     </table>
 
+    socket.on('job-error', (errorMessage) => {
+    const logList = document.getElementById('status-logs');
+    logList.innerHTML += `<li class="text-red-500 font-bold">! ${errorMessage}</li>`;
+    btn.disabled = false;
+    btn.innerText = "RETRY MANUALLY";
+});
+
     <script>
         const API_BASE = 'http://localhost:3000/dashboard';
         const HEADERS = { 'x-api-key': 'your-super-secret-key' };
