@@ -1,3 +1,7 @@
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Server on port ${PORT}`));
 ```
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+const redisClient = createClient({ url: redisUrl });
+```
+
