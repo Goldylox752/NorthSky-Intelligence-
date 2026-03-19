@@ -1,3 +1,11 @@
+# ... existing config ...
+SENTRY_DSN="https://sentry.io"
+
+# ... inside the config setting block ...
+echo "🔐 Setting Sentry DSN..."
+heroku config:set SENTRY_DSN=$SENTRY_DSN
+
+
 #!/bin/bash
 
 # --- CONFIGURATION ---
