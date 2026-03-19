@@ -1,3 +1,23 @@
+const { Queue } = require('bullmq');
+const IORedis = require('ioredis');
+
+// Connect to Redis (Heroku uses REDIS_URL)
+const connection = new IORedis(process.env.REDIS_URL || 'redis://127.0.0.1:6379', {
+  maxRetriesPerRequest: null
+});
+
+// Configure Queue with Retry Backoff
+const ripQueue = new Queue('ripper-tasks', {
+  connection,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 5000 }
+  }
+});
+
+module.exports = { ripQueue, connection };
+
+
 const ripQueue = new Queue('ripper-tasks', {
   connection,
   defaultJobOptions: {
