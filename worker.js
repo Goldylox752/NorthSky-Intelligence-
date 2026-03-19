@@ -16,7 +16,16 @@ worker.on('completed', async (job) => {
     text: `✅ *Rip Complete!* \n*URL:* ${job.data.url} \n*ID:* ${job.id}`
   });
 });
-
+worker.on('failed', (job, err) => {
+  console.error(`Job ${job.id} failed: ${err.message}`);
+  
+  Sentry.withScope((scope) => {
+    scope.setExtra("jobId", job.id);
+    scope.setExtra("url", job.data.url);
+    scope.setTag("process", "worker");
+    Sentry.captureException(err);
+  });
+});
 worker.on('completed', async (job) => {
   // Only send email for "massive" rips (e.g., if it took a long time or is a specific type)
   console.log(`Job ${job.id} finished. Sending notification...`);
