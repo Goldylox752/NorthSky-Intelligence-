@@ -1,3 +1,26 @@
+// Private Node endpoint to get metadata
+app.get('/get-metadata', async (req, res) => {
+    const { url } = req.query;
+    try {
+        // Fetches all available formats, title, and thumbnails
+        const info = await ytdlp.getInfoAsync(url);
+        
+        // Filter to find the best 4K VP9 video and best audio
+        const videoStream = info.formats.find(f => f.vcodec.includes('vp9') && f.height >= 2160);
+        const audioStream = info.formats.find(f => f.acodec !== 'none' && !f.vcodec);
+
+        res.json({
+            title: info.title,
+            thumbnail: info.thumbnail,
+            duration: info.duration,
+            videoUrl: videoStream?.url,
+            audioUrl: audioStream?.url
+        });
+    } catch (err) {
+        res.status(500).json({ error: "Failed to fetch metadata" });
+    }
+});
+
 # Use Node.js LTS version
 FROM node:20-bullseye-slim
 
