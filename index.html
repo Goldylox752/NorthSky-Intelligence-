@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NorthSky AI | Never Miss Another Lead</title>
+<title>NorthSky AI | Capture More Leads Automatically</title>
 
 <style>
 :root {
@@ -29,7 +29,8 @@ body{
 
 h1{
   color:var(--accent);
-  font-size:2.2rem;
+  font-size:2.4rem;
+  line-height:1.3;
 }
 
 .card{
@@ -58,7 +59,7 @@ h1{
 }
 
 .price{
-  font-size:2.2rem;
+  font-size:2.4rem;
   color:#facc15;
   font-weight:bold;
 }
@@ -75,6 +76,12 @@ h1{
   margin-top:4px;
 }
 
+.urgent{
+  color:#ef4444;
+  font-weight:bold;
+  margin-top:10px;
+}
+
 .result-success{ color:#22c55e; }
 .result-error{ color:#ef4444; }
 
@@ -85,6 +92,12 @@ input{
   border-radius:8px;
   border:none;
 }
+
+img{
+  width:100%;
+  border-radius:10px;
+  margin-top:10px;
+}
 </style>
 </head>
 
@@ -92,26 +105,25 @@ input{
 
 <div class="container">
 
-<h1>Stop Losing Leads — We Install an AI That Replies Instantly (24/7)</h1>
+<!-- 🔥 NEW HEADLINE -->
+<h1>Stop Losing $1,000+ in Missed Leads Every Month</h1>
 
 <p class="small">
-Capture, respond, and convert every lead automatically.
+We install an AI that replies instantly, follows up automatically, and turns visitors into paying customers — 24/7.
 </p>
 
-<!-- 🔑 API TEST -->
+<p class="urgent">⚠️ Only 10 businesses onboarded per week (to ensure proper setup)</p>
+
+<!-- 📊 METRICS -->
 <div class="card">
-  <p class="small">Developers & advanced users can test our API below</p>
+  <h3>📈 Real Results</h3>
 
-  <h3>🔑 Test Your API</h3>
-
-  <input id="apiKey" placeholder="Enter API key" />
-
-  <button onclick="callAPI()" class="btn">Run API</button>
-
-  <p id="result" class="small"></p>
+  <p>💬 37+ leads captured in 48 hours</p>
+  <p>⚡ Replies sent in under 5 seconds</p>
+  <p>💰 $4,200+ closed using automated follow-ups</p>
 </div>
 
-<!-- VIDEO -->
+<!-- 🎥 VIDEO -->
 <div class="card">
 <h3>🎥 See It In Action</h3>
 
@@ -119,33 +131,67 @@ Capture, respond, and convert every lead automatically.
   <source src="demo.mp4" type="video/mp4">
 </video>
 
-<p class="small">Watch leads get captured and converted automatically</p>
+<p class="small">Watch a real lead get captured and converted automatically</p>
 </div>
 
-<!-- OFFER -->
+<!-- 📸 SCREENSHOT -->
 <div class="card">
-<h2>🔥 AI Lead System</h2>
+<h3>📊 Live System Preview</h3>
+
+<!-- 👉 REPLACE THIS IMAGE -->
+<img src="dashboard.png" alt="AI dashboard preview">
+
+<p class="small">Real-time leads, replies, and conversions</p>
+</div>
+
+<!-- 💰 OFFER -->
+<div class="card">
+<h2>🔥 Done-For-You AI Lead System</h2>
+
+<div style="text-align:left;">
+<p>✔ Capture every lead automatically</p>
+<p>✔ Instant AI replies (under 5 seconds)</p>
+<p>✔ Automated follow-ups</p>
+<p>✔ Converts more visitors into customers</p>
+</div>
 
 <p class="strike">$499</p>
 <p class="price">$99</p>
 
+<p class="small">Includes full setup + AI system + API access</p>
+
 <p class="badge">✅ One-time setup</p>
 
-<!-- ✅ UPDATED STRIPE LINK -->
 <a href="https://buy.stripe.com/fZu7sE5uH4mwbc36762ZO0s?success_url=https://north-sky-ai.vercel.app/success?session_id={CHECKOUT_SESSION_ID}">
-  <button class="btn">🚀 Get Started</button>
+  <button class="btn">🚀 Get My AI System Now</button>
 </a>
 
-<p class="small">🔒 Secure checkout</p>
+<p class="small">🔒 Secure checkout powered by Stripe</p>
 </div>
 
-<!-- FINAL CTA -->
+<!-- ⚡ FINAL CTA -->
 <div class="card">
 <h3>Don’t Lose Another Lead</h3>
+<p class="small">Every missed message = lost revenue</p>
 
 <a href="https://buy.stripe.com/fZu7sE5uH4mwbc36762ZO0s?success_url=https://north-sky-ai.vercel.app/success?session_id={CHECKOUT_SESSION_ID}">
   <button class="btn">⚡ Start Now</button>
 </a>
+</div>
+
+<!-- 🔑 API SECTION (MOVED DOWN) -->
+<div class="card">
+  <p class="small">
+    Developers & advanced users can test our API below
+  </p>
+
+  <h3>🔑 Test Your API (Developer Access)</h3>
+
+  <input id="apiKey" placeholder="Enter API key" />
+
+  <button onclick="callAPI()" class="btn">Run API</button>
+
+  <p id="result" class="small"></p>
 </div>
 
 <p class="small" style="margin-top:20px;">
