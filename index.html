@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NorthSky AI | Capture More Leads Automatically</title>
+<title>NorthSky AI</title>
 
 <style>
 :root {
@@ -27,11 +27,6 @@ body{
   padding:25px 18px;
 }
 
-h1{
-  color:var(--accent);
-  font-size:2.4rem;
-}
-
 .card{
   background:var(--card);
   padding:22px;
@@ -50,12 +45,6 @@ h1{
   cursor:pointer;
 }
 
-.small{font-size:0.9rem;opacity:0.85;}
-.price{font-size:2.4rem;color:#facc15;}
-.strike{text-decoration:line-through;opacity:0.6;}
-.badge{color:#22c55e;font-size:0.9rem;}
-.urgent{color:#ef4444;font-weight:bold;}
-
 textarea,input,select{
   width:100%;
   padding:12px;
@@ -71,6 +60,20 @@ textarea,input,select{
   border-radius:8px;
   min-height:60px;
 }
+
+/* 🔥 PREVIEW STYLING */
+#previewCard{
+  display:none;
+  margin-top:15px;
+  text-align:left;
+}
+
+#previewCard img{
+  width:100%;
+  border-radius:10px;
+  margin-top:10px;
+  box-shadow:0 0 20px rgba(56,189,248,0.25);
+}
 </style>
 </head>
 
@@ -78,45 +81,26 @@ textarea,input,select{
 
 <div class="container">
 
-<h1>Stop Losing $1,000+ in Missed Leads</h1>
-<p class="small">AI replies instantly, follows up, and converts leads 24/7.</p>
+<h1>AI Lead & Competitor Analyzer</h1>
 
-<!-- 💰 OFFER -->
 <div class="card">
-<h2>🔥 AI Lead System</h2>
+  <select id="mode">
+    <option value="sales">💰 Sales Reply</option>
+    <option value="competitor">📊 Competitor Analysis</option>
+  </select>
 
-<p class="strike">$499</p>
-<p class="price">$99</p>
+  <textarea id="lead" placeholder="Paste a message OR website URL..."></textarea>
 
-<a href="https://buy.stripe.com/fZu7sE5uH4mwbc36762ZO0s?success_url=https://north-sky-ai.vercel.app/success">
-  <button class="btn">🚀 Get Access</button>
-</a>
-</div>
+  <button onclick="runAI()" class="btn">Run AI</button>
 
-<!-- 🤖 AI TOOL -->
-<div class="card">
-<h3>🤖 AI Analyzer Tool</h3>
+  <!-- 🔎 PREVIEW -->
+  <div id="previewCard">
+    <p>🔎 Website Preview</p>
+    <img id="ogImage" style="display:none;" />
+    <img id="screenshot" />
+  </div>
 
-<select id="mode">
-  <option value="sales">💰 Sales Reply Mode</option>
-  <option value="competitor">📊 Competitor Analysis</option>
-</select>
-
-<textarea id="lead" placeholder="Paste a message OR website URL..."></textarea>
-
-<button onclick="runAI()" class="btn">Run AI</button>
-
-<div id="output"></div>
-</div>
-
-<!-- 🔑 API TEST -->
-<div class="card">
-<h3>🔑 API Test</h3>
-
-<input id="apiKey" placeholder="Enter API key" />
-<button onclick="callAPI()" class="btn">Run API</button>
-
-<p id="result" class="small"></p>
+  <div id="output"></div>
 </div>
 
 </div>
@@ -127,10 +111,24 @@ function isURL(str) {
   return str.startsWith("http://") || str.startsWith("https://");
 }
 
-// 🧠 BUILD INPUT
+// 📸 SCREENSHOT
+function getScreenshot(url) {
+  return `https://image.thum.io/get/fullpage/${url}`;
+}
+
+// 🧠 BUILD INPUT + PREVIEW
 async function buildInputData(input, output) {
   let inputData = input;
   const mode = document.getElementById("mode").value;
+
+  const previewCard = document.getElementById("previewCard");
+  const ogImageEl = document.getElementById("ogImage");
+  const screenshotEl = document.getElementById("screenshot");
+
+  // RESET PREVIEW
+  previewCard.style.display = "none";
+  ogImageEl.style.display = "none";
+  screenshotEl.src = "";
 
   if (isURL(input)) {
     output.innerText = "Analyzing website... 🔍";
@@ -149,6 +147,19 @@ async function buildInputData(input, output) {
         return null;
       }
 
+      // 🔥 SHOW PREVIEW
+      previewCard.style.display = "block";
+
+      // OG IMAGE
+      if (data.ogImage) {
+        ogImageEl.src = data.ogImage;
+        ogImageEl.style.display = "block";
+      }
+
+      // SCREENSHOT (always show)
+      screenshotEl.src = getScreenshot(input);
+
+      // 🧠 MODES
       if (mode === "sales") {
         inputData = `
 You are an AI sales expert.
@@ -214,37 +225,10 @@ async function runAI() {
     });
 
     const data = await res.json();
-
-    output.innerText = res.ok ? data.reply : (data.error || "Error");
+    output.innerText = res.ok ? data.reply : "Error";
 
   } catch {
     output.innerText = "Connection failed";
-  }
-}
-
-// 🔑 API TEST
-async function callAPI() {
-  const key = document.getElementById('apiKey').value;
-  const result = document.getElementById('result');
-
-  if (!key) {
-    result.innerText = "Enter API key";
-    return;
-  }
-
-  result.innerText = "Testing...";
-
-  try {
-    const res = await fetch('/api/rip', {
-      method:'GET',
-      headers:{'x-api-key':key}
-    });
-
-    const data = await res.json();
-    result.innerText = res.ok ? "API working ✅" : "Invalid key";
-
-  } catch {
-    result.innerText = "Connection failed";
   }
 }
 </script>
