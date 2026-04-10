@@ -16,13 +16,13 @@ Redis (optional)
 
 Future Upgrades
 
-Stripe billing system 💰
+Stripe billing system 
 
-User accounts 🔐
+User accounts 
 
-API usage dashboard 📊
+API usage dashboard 
 
-Public SaaS API 🌍
+Public SaaS API 
 
 Author
 
