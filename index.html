@@ -1,49 +1,81 @@
 <script>
 // 🔍 URL CHECK
 function isURL(str) {
-  return str.startsWith("http://") || str.startsWith("https://");
+  return /^https?:\/\//i.test(str.trim());
 }
 
 // 📸 SCREENSHOT
 function getScreenshot(url) {
-  return `https://image.thum.io/get/fullpage/${url}`;
+  return `https://image.thum.io/get/fullpage/${encodeURIComponent(url)}`;
 }
 
-// 🧠 BUILD INPUT + PREVIEW
+// 📊 SCORE FUNCTION
+function calculateScore(data) {
+  let score = 0;
+  let reasons = [];
+
+  if (data.title) score += 2;
+  else reasons.push("Missing title");
+
+  if (data.description) score += 2;
+  else reasons.push("No meta description");
+
+  if (data.ogImage) score += 2;
+  else reasons.push("No social preview image");
+
+  if (data.keywords && data.keywords.length > 5) score += 2;
+  else reasons.push("Weak keyword targeting");
+
+  if (data.content && data.content.length > 500) score += 2;
+  else reasons.push("Thin content");
+
+  return {
+    score,
+    reasons: reasons.join(", ")
+  };
+}
+
+// 🧠 BUILD INPUT + PREVIEW + SCORE
 async function buildInputData(input, output) {
-  let inputData = input;
+  let inputData = input.trim();
   const mode = document.getElementById("mode").value;
 
   const previewCard = document.getElementById("previewCard");
   const ogImageEl = document.getElementById("ogImage");
   const screenshotEl = document.getElementById("screenshot");
 
-  // RESET PREVIEW
+  const scoreCard = document.getElementById("scoreCard");
+  const scoreBar = document.getElementById("scoreBar");
+  const scoreText = document.getElementById("scoreText");
+  const scoreReason = document.getElementById("scoreReason");
+
+  // 🔄 RESET UI
   previewCard.style.display = "none";
+  scoreCard.style.display = "none";
   ogImageEl.style.display = "none";
+  ogImageEl.src = "";
   screenshotEl.src = "";
 
-  if (isURL(input)) {
+  if (isURL(inputData)) {
     output.innerText = "Analyzing website... 🔍";
 
     try {
       const res = await fetch('/api/scrape', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ url: input })
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: inputData })
       });
 
       const data = await res.json();
 
-      if (!res.ok) {
+      if (!res.ok || !data) {
         output.innerText = "Scrape failed";
         return null;
       }
 
-      // ✅ SAFE KEYWORDS
       const keywords = data.keywords || [];
 
-      // 🔥 SHOW PREVIEW
+      // 🔎 SHOW PREVIEW
       previewCard.style.display = "block";
 
       if (data.ogImage) {
@@ -51,21 +83,33 @@ async function buildInputData(input, output) {
         ogImageEl.style.display = "block";
       }
 
-      screenshotEl.src = getScreenshot(input);
+      screenshotEl.src = getScreenshot(inputData);
 
-      // 🧠 SALES MODE
+      // 📊 CALCULATE SCORE
+      const scoreData = calculateScore(data);
+      const percent = (scoreData.score / 10) * 100;
+
+      scoreCard.style.display = "block";
+      scoreBar.style.width = percent + "%";
+      scoreText.innerText = `Score: ${scoreData.score}/10`;
+      scoreReason.innerText = scoreData.reasons || "Strong overall setup";
+
+      // 🧠 BUILD PROMPT
       if (mode === "sales") {
         inputData = `
 You are an AI sales expert.
 
 Business:
-${data.title || data.ogTitle}
+${data.title || data.ogTitle || "Unknown"}
 
 Description:
-${data.description}
+${data.description || "No description"}
 
 Keywords:
-${keywords.join(", ")}
+${keywords.join(", ") || "None"}
+
+Score:
+${scoreData.score}/10
 
 Task:
 1. What they do
@@ -74,19 +118,21 @@ Task:
 `;
       }
 
-      // 🧠 COMPETITOR MODE
       else if (mode === "competitor") {
         inputData = `
 You are a marketing expert.
 
 Business:
-${data.title || data.ogTitle}
+${data.title || data.ogTitle || "Unknown"}
 
 Description:
-${data.description}
+${data.description || "No description"}
 
 Keywords:
-${keywords.join(", ")}
+${keywords.join(", ") || "None"}
+
+Score:
+${scoreData.score}/10
 
 Task:
 1. Strengths
@@ -96,7 +142,8 @@ Task:
 `;
       }
 
-    } catch {
+    } catch (err) {
+      console.error(err);
       output.innerText = "Error scraping site";
       return null;
     }
@@ -110,7 +157,7 @@ async function runAI() {
   const input = document.getElementById("lead").value;
   const output = document.getElementById("output");
 
-  if (!input) {
+  if (!input.trim()) {
     output.innerText = "Enter input";
     return;
   }
@@ -122,15 +169,21 @@ async function runAI() {
 
   try {
     const res = await fetch('/api/generate', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({ message: inputData })
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: inputData })
     });
 
     const data = await res.json();
-    output.innerText = res.ok ? data.reply : "Error";
 
-  } catch {
+    if (res.ok && data.reply) {
+      output.innerText = data.reply;
+    } else {
+      output.innerText = data.error || "Error generating response";
+    }
+
+  } catch (err) {
+    console.error(err);
     output.innerText = "Connection failed";
   }
 }
