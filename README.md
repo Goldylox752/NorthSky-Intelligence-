@@ -23,3 +23,9 @@ User accounts 🔐
 API usage dashboard 📊
 
 Public SaaS API 🌍
+
+Author
+
+NorthSky AI Engine Project
+
+Built with Node.js + AI scraping tools
