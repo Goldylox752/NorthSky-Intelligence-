@@ -1,42 +1,42 @@
 <script>
 // =============================
-// 🔐 GLOBAL STATE
+// 🌌 NORTH SKY INTELLIGENCE - CORE STATE
 // =============================
 const state = {
   loading: false
 };
 
 // =============================
-// 🔍 VALID URL
+// 🔍 VALID URL CHECK
 // =============================
 function isURL(str) {
-  return /^https?:\/\//i.test(str.trim());
+  return /^https?:\/\//i.test((str || "").trim());
 }
 
 // =============================
-// 📸 SCREENSHOT
+// 📸 SCREENSHOT GENERATOR
 // =============================
 function getScreenshot(url) {
   return `https://image.thum.io/get/fullpage/${encodeURIComponent(url)}`;
 }
 
 // =============================
-// 📊 SCORE ENGINE (UPGRADED)
+// 📊 SCORE ENGINE (HARDENED)
 // =============================
-function calculateScore(data) {
+function calculateScore(data = {}) {
   let score = 0;
-  let issues = [];
+  const issues = [];
 
   if (data.title) score += 2;
   else issues.push("Missing title");
 
   if (data.description) score += 2;
-  else issues.push("No meta description");
+  else issues.push("Missing meta description");
 
   if (data.ogImage) score += 2;
-  else issues.push("No social preview image");
+  else issues.push("Missing social preview image");
 
-  if (data.keywords && data.keywords.length > 5) score += 2;
+  if (Array.isArray(data.keywords) && data.keywords.length > 5) score += 2;
   else issues.push("Weak keyword targeting");
 
   if (data.content && data.content.length > 800) score += 2;
@@ -50,25 +50,26 @@ function calculateScore(data) {
 }
 
 // =============================
-// 🎬 LOADING UI
+// 🎬 LOADING SEQUENCE
 // =============================
 async function showLoading(output) {
-  output.innerHTML = `
-    🤖 Analyzing website...<br><br>
-    🔍 Scanning SEO...
-  `;
+  if (!output) return;
 
-  await delay(500);
+  output.innerHTML = "🤖 Analyzing website...";
+
+  await delay(400);
+  output.innerHTML += "<br>🔍 Scanning SEO...";
+  await delay(400);
   output.innerHTML += "<br>📊 Checking structure...";
-  await delay(500);
+  await delay(400);
   output.innerHTML += "<br>⚡ Generating insights...";
 }
 
 // =============================
-// 🧠 BUILD DATA + UI
+// 🧠 BUILD INPUT DATA + UI
 // =============================
 async function buildInputData(input, output) {
-  const inputData = input.trim();
+  const inputData = (input || "").trim();
   const mode = document.getElementById("mode")?.value || "sales";
 
   const previewCard = document.getElementById("previewCard");
@@ -80,38 +81,42 @@ async function buildInputData(input, output) {
   const scoreText = document.getElementById("scoreText");
   const scoreReason = document.getElementById("scoreReason");
 
-  // RESET UI
+  // =============================
+  // RESET UI SAFELY
+  // =============================
   if (previewCard) previewCard.style.display = "none";
   if (scoreCard) scoreCard.style.display = "none";
 
   if (ogImageEl) {
-    ogImageEl.style.display = "none";
     ogImageEl.src = "";
+    ogImageEl.style.display = "none";
   }
 
-  if (screenshotEl) screenshotEl.src = "";
+  if (screenshotEl) {
+    screenshotEl.src = "";
+  }
 
   // =============================
-  // 🔍 SCRAPE WEBSITE
+  // 🌐 WEBSITE MODE
   // =============================
   if (isURL(inputData)) {
     await showLoading(output);
 
     try {
-      const res = await fetch('/api/scrape', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/scrape", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: inputData })
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
 
       if (!res.ok || !data) {
         output.innerText = "⚠️ Failed to analyze site";
         return null;
       }
 
-      const keywords = data.keywords || [];
+      const keywords = Array.isArray(data.keywords) ? data.keywords : [];
 
       // =============================
       // 👁 PREVIEW UI
@@ -138,11 +143,11 @@ async function buildInputData(input, output) {
       if (scoreReason) scoreReason.innerText = scoreData.issues.join(", ");
 
       // =============================
-      // 🧠 BUILD AI PROMPT
+      // 🧠 PROMPT GENERATION
       // =============================
       if (mode === "sales") {
         return `
-You are a world-class sales expert.
+You are North Sky Intelligence, a world-class sales expert.
 
 Business:
 ${data.title || data.ogTitle || "Unknown"}
@@ -157,15 +162,15 @@ Score:
 ${scoreData.score}/10
 
 Task:
-1. What they do
-2. Who they target
+1. Explain what the business does
+2. Identify target audience
 3. Write a high-converting sales message
 `;
       }
 
       if (mode === "competitor") {
         return `
-You are a CRO and marketing expert.
+You are North Sky Intelligence, a CRO and marketing strategist.
 
 Business:
 ${data.title || data.ogTitle || "Unknown"}
@@ -182,10 +187,11 @@ ${scoreData.score}/10
 Task:
 1. Strengths
 2. Weaknesses
-3. How to beat them
-4. Better offer + positioning
+3. How to outperform them
+4. Better positioning and offer strategy
 `;
       }
+
     } catch (err) {
       console.error(err);
       output.innerText = "⚠️ Error analyzing site";
@@ -197,22 +203,23 @@ Task:
 }
 
 // =============================
-// 🚀 RUN AI
+// 🚀 MAIN RUN FUNCTION
 // =============================
 async function runAI() {
   if (state.loading) return;
 
-  const input = document.getElementById("lead").value;
+  const input = document.getElementById("lead")?.value || "";
   const output = document.getElementById("output");
 
   if (!input.trim()) {
-    output.innerText = "Enter input";
+    output.innerText = "⚠️ Enter input";
     return;
   }
 
   state.loading = true;
 
   const inputData = await buildInputData(input, output);
+
   if (!inputData) {
     state.loading = false;
     return;
@@ -221,18 +228,18 @@ async function runAI() {
   output.innerText = "Thinking... 🤖";
 
   try {
-    const res = await fetch('/api/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+    const res = await fetch("/api/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: inputData })
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => null);
 
-    if (res.ok && data.reply) {
+    if (res.ok && data?.reply) {
       output.innerText = data.reply;
     } else {
-      output.innerText = data.error || "Error generating response";
+      output.innerText = data?.error || "⚠️ Error generating response";
     }
 
   } catch (err) {
