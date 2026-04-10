@@ -1,44 +1,75 @@
 <script>
-// 🔍 URL CHECK
+// =============================
+// 🔐 GLOBAL STATE
+// =============================
+const state = {
+  loading: false
+};
+
+// =============================
+// 🔍 VALID URL
+// =============================
 function isURL(str) {
   return /^https?:\/\//i.test(str.trim());
 }
 
+// =============================
 // 📸 SCREENSHOT
+// =============================
 function getScreenshot(url) {
   return `https://image.thum.io/get/fullpage/${encodeURIComponent(url)}`;
 }
 
-// 📊 SCORE FUNCTION
+// =============================
+// 📊 SCORE ENGINE (UPGRADED)
+// =============================
 function calculateScore(data) {
   let score = 0;
-  let reasons = [];
+  let issues = [];
 
   if (data.title) score += 2;
-  else reasons.push("Missing title");
+  else issues.push("Missing title");
 
   if (data.description) score += 2;
-  else reasons.push("No meta description");
+  else issues.push("No meta description");
 
   if (data.ogImage) score += 2;
-  else reasons.push("No social preview image");
+  else issues.push("No social preview image");
 
   if (data.keywords && data.keywords.length > 5) score += 2;
-  else reasons.push("Weak keyword targeting");
+  else issues.push("Weak keyword targeting");
 
-  if (data.content && data.content.length > 500) score += 2;
-  else reasons.push("Thin content");
+  if (data.content && data.content.length > 800) score += 2;
+  else issues.push("Thin content");
 
   return {
     score,
-    reasons: reasons.join(", ")
+    percent: (score / 10) * 100,
+    issues: issues.length ? issues : ["Strong overall setup"]
   };
 }
 
-// 🧠 BUILD INPUT + PREVIEW + SCORE
+// =============================
+// 🎬 LOADING UI
+// =============================
+async function showLoading(output) {
+  output.innerHTML = `
+    🤖 Analyzing website...<br><br>
+    🔍 Scanning SEO...
+  `;
+
+  await delay(500);
+  output.innerHTML += "<br>📊 Checking structure...";
+  await delay(500);
+  output.innerHTML += "<br>⚡ Generating insights...";
+}
+
+// =============================
+// 🧠 BUILD DATA + UI
+// =============================
 async function buildInputData(input, output) {
-  let inputData = input.trim();
-  const mode = document.getElementById("mode").value;
+  const inputData = input.trim();
+  const mode = document.getElementById("mode")?.value || "sales";
 
   const previewCard = document.getElementById("previewCard");
   const ogImageEl = document.getElementById("ogImage");
@@ -49,15 +80,22 @@ async function buildInputData(input, output) {
   const scoreText = document.getElementById("scoreText");
   const scoreReason = document.getElementById("scoreReason");
 
-  // 🔄 RESET UI
-  previewCard.style.display = "none";
-  scoreCard.style.display = "none";
-  ogImageEl.style.display = "none";
-  ogImageEl.src = "";
-  screenshotEl.src = "";
+  // RESET UI
+  if (previewCard) previewCard.style.display = "none";
+  if (scoreCard) scoreCard.style.display = "none";
 
+  if (ogImageEl) {
+    ogImageEl.style.display = "none";
+    ogImageEl.src = "";
+  }
+
+  if (screenshotEl) screenshotEl.src = "";
+
+  // =============================
+  // 🔍 SCRAPE WEBSITE
+  // =============================
   if (isURL(inputData)) {
-    output.innerText = "Analyzing website... 🔍";
+    await showLoading(output);
 
     try {
       const res = await fetch('/api/scrape', {
@@ -69,35 +107,42 @@ async function buildInputData(input, output) {
       const data = await res.json();
 
       if (!res.ok || !data) {
-        output.innerText = "Scrape failed";
+        output.innerText = "⚠️ Failed to analyze site";
         return null;
       }
 
       const keywords = data.keywords || [];
 
-      // 🔎 SHOW PREVIEW
-      previewCard.style.display = "block";
+      // =============================
+      // 👁 PREVIEW UI
+      // =============================
+      if (previewCard) previewCard.style.display = "block";
 
-      if (data.ogImage) {
+      if (data.ogImage && ogImageEl) {
         ogImageEl.src = data.ogImage;
         ogImageEl.style.display = "block";
       }
 
-      screenshotEl.src = getScreenshot(inputData);
+      if (screenshotEl) {
+        screenshotEl.src = getScreenshot(inputData);
+      }
 
-      // 📊 CALCULATE SCORE
+      // =============================
+      // 📊 SCORE UI
+      // =============================
       const scoreData = calculateScore(data);
-      const percent = (scoreData.score / 10) * 100;
 
-      scoreCard.style.display = "block";
-      scoreBar.style.width = percent + "%";
-      scoreText.innerText = `Score: ${scoreData.score}/10`;
-      scoreReason.innerText = scoreData.reasons || "Strong overall setup";
+      if (scoreCard) scoreCard.style.display = "block";
+      if (scoreBar) scoreBar.style.width = scoreData.percent + "%";
+      if (scoreText) scoreText.innerText = `Score: ${scoreData.score}/10`;
+      if (scoreReason) scoreReason.innerText = scoreData.issues.join(", ");
 
-      // 🧠 BUILD PROMPT
+      // =============================
+      // 🧠 BUILD AI PROMPT
+      // =============================
       if (mode === "sales") {
-        inputData = `
-You are an AI sales expert.
+        return `
+You are a world-class sales expert.
 
 Business:
 ${data.title || data.ogTitle || "Unknown"}
@@ -114,13 +159,13 @@ ${scoreData.score}/10
 Task:
 1. What they do
 2. Who they target
-3. Write a high-converting reply
+3. Write a high-converting sales message
 `;
       }
 
-      else if (mode === "competitor") {
-        inputData = `
-You are a marketing expert.
+      if (mode === "competitor") {
+        return `
+You are a CRO and marketing expert.
 
 Business:
 ${data.title || data.ogTitle || "Unknown"}
@@ -138,13 +183,12 @@ Task:
 1. Strengths
 2. Weaknesses
 3. How to beat them
-4. Better sales pitch
+4. Better offer + positioning
 `;
       }
-
     } catch (err) {
       console.error(err);
-      output.innerText = "Error scraping site";
+      output.innerText = "⚠️ Error analyzing site";
       return null;
     }
   }
@@ -152,8 +196,12 @@ Task:
   return inputData;
 }
 
+// =============================
 // 🚀 RUN AI
+// =============================
 async function runAI() {
+  if (state.loading) return;
+
   const input = document.getElementById("lead").value;
   const output = document.getElementById("output");
 
@@ -162,8 +210,13 @@ async function runAI() {
     return;
   }
 
+  state.loading = true;
+
   const inputData = await buildInputData(input, output);
-  if (!inputData) return;
+  if (!inputData) {
+    state.loading = false;
+    return;
+  }
 
   output.innerText = "Thinking... 🤖";
 
@@ -184,7 +237,16 @@ async function runAI() {
 
   } catch (err) {
     console.error(err);
-    output.innerText = "Connection failed";
+    output.innerText = "⚠️ Connection failed";
   }
+
+  state.loading = false;
+}
+
+// =============================
+// ⏱ UTIL
+// =============================
+function delay(ms) {
+  return new Promise(res => setTimeout(res, ms));
 }
 </script>
