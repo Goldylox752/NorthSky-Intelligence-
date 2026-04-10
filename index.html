@@ -103,6 +103,14 @@ input{
   border-radius:8px;
   border:none;
 }
+
+.result-success{
+  color:#22c55e;
+}
+
+.result-error{
+  color:#ef4444;
+}
 </style>
 </head>
 
@@ -119,9 +127,13 @@ Capture, respond, and follow up with every lead automatically — even while you
 
 <p class="urgent">⏳ Limited onboarding spots this week</p>
 
-<!-- 🔑 API TEST (NEW SECTION) -->
+<!-- 🔑 API TEST (FINAL + POSITIONED) -->
 <div class="card">
-  <h3>🔑 Test Your API</h3>
+  <p class="small">
+    Developers & advanced users can test our API below
+  </p>
+
+  <h3>🔑 Test Your API (Developer Access)</h3>
 
   <input id="apiKey" placeholder="Enter API key" />
 
@@ -140,16 +152,16 @@ Capture, respond, and follow up with every lead automatically — even while you
   <source src="demo.mp4" type="video/mp4">
 </video>
 
-<p class="small">Watch a real lead get captured, replied to, and converted automatically</p>
+<p class="small">Watch a real lead get captured and converted automatically</p>
 </div>
 
-<!-- VISITOR FLOW -->
+<!-- FLOW -->
 <div class="card left">
-<h3>⚡ What Happens When Someone Visits Your Site</h3>
+<h3>⚡ How It Works</h3>
 
 <div class="flow">
 <p>🧑 Visitor submits their info</p>
-<p>⚡ AI replies in under 5 seconds</p>
+<p>⚡ AI replies instantly</p>
 <p>💬 Automated follow-ups</p>
 <p>💰 Converts into a paying customer</p>
 </div>
@@ -163,13 +175,15 @@ Capture, respond, and follow up with every lead automatically — even while you
 <p>✔ Capture every lead</p>
 <p>✔ Instant AI replies</p>
 <p>✔ Automated follow-ups</p>
-<p>✔ More conversions</p>
+<p>✔ Higher conversion rates</p>
 </div>
 
 <div class="divider"></div>
 
 <p class="strike">$499</p>
 <p class="price">$99</p>
+
+<p class="small">Includes AI system + API access</p>
 
 <p class="badge">✅ One-time setup</p>
 
@@ -183,6 +197,7 @@ Capture, respond, and follow up with every lead automatically — even while you
 <!-- FINAL CTA -->
 <div class="card">
 <h3>Don’t Lose Another Lead</h3>
+<p class="small">Every missed message = lost revenue</p>
 
 <a href="https://buy.stripe.com/fZu7sE5uH4mwbc36762ZO0s">
   <button class="btn">⚡ Start Now for $99</button>
@@ -195,7 +210,7 @@ Capture, respond, and follow up with every lead automatically — even while you
 
 </div>
 
-<!-- ✅ JS GOES HERE (NOT IN STYLE) -->
+<!-- ✅ SCRIPT -->
 <script>
 async function callAPI() {
   const key = document.getElementById('apiKey').value;
@@ -203,10 +218,12 @@ async function callAPI() {
 
   if (!key) {
     result.innerText = "Enter API key";
+    result.className = "small result-error";
     return;
   }
 
   result.innerText = "Loading...";
+  result.className = "small";
 
   try {
     const res = await fetch('/api/rip', {
@@ -218,10 +235,17 @@ async function callAPI() {
 
     const data = await res.json();
 
-    result.innerText = data.message || data.error;
+    if (res.ok) {
+      result.innerText = data.message || "Success";
+      result.className = "small result-success";
+    } else {
+      result.innerText = data.error || "Error";
+      result.className = "small result-error";
+    }
 
   } catch (err) {
-    result.innerText = "API error";
+    result.innerText = "API connection failed";
+    result.className = "small result-error";
   }
 }
 </script>
