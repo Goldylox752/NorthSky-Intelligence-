@@ -13,3 +13,13 @@ Winston (logging)
 express-rate-limit
 
 Redis (optional)
+
+Future Upgrades
+
+Stripe billing system 💰
+
+User accounts 🔐
+
+API usage dashboard 📊
+
+Public SaaS API 🌍
