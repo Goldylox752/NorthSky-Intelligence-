@@ -1,11 +1,144 @@
-https://northsky-ai.onrender.com/
-const statsRes = await fetch(`${API_BASE}/stats`, {
-  headers: {
-    'x-api-key': 'your-super-secret-key'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard | NorthSky AI</title>
+
+<style>
+:root {
+  --bg:#020617;
+  --card:#1e293b;
+  --text:#f8fafc;
+  --accent:#38bdf8;
+}
+
+body{
+  margin:0;
+  font-family:Arial;
+  background:var(--bg);
+  color:var(--text);
+}
+
+.container{
+  max-width:700px;
+  margin:auto;
+  padding:30px 20px;
+}
+
+.card{
+  background:var(--card);
+  padding:20px;
+  border-radius:12px;
+  margin-bottom:20px;
+}
+
+h1{
+  color:var(--accent);
+}
+
+.btn{
+  padding:10px 15px;
+  border:none;
+  border-radius:8px;
+  cursor:pointer;
+  background:#38bdf8;
+  color:#000;
+  font-weight:bold;
+}
+
+.copy{
+  margin-left:10px;
+}
+
+.usage-bar{
+  width:100%;
+  height:10px;
+  background:#334155;
+  border-radius:10px;
+  overflow:hidden;
+  margin-top:10px;
+}
+
+.usage-fill{
+  height:100%;
+  background:#22c55e;
+  width:0%;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>🚀 NorthSky Dashboard</h1>
+
+<!-- API KEY -->
+<div class="card">
+  <h3>Your API Key</h3>
+  <p id="apiKey">Loading...</p>
+  <button class="btn" onclick="copyKey()">Copy</button>
+</div>
+
+<!-- PLAN -->
+<div class="card">
+  <h3>Plan</h3>
+  <p id="plan">Loading...</p>
+</div>
+
+<!-- USAGE -->
+<div class="card">
+  <h3>Usage</h3>
+  <p id="usageText">Loading...</p>
+
+  <div class="usage-bar">
+    <div id="usageFill" class="usage-fill"></div>
+  </div>
+</div>
+
+</div>
+
+<script>
+async function loadDashboard() {
+  const key = localStorage.getItem("apiKey");
+
+  if (!key) {
+    document.getElementById("apiKey").innerText = "No API key found";
+    return;
   }
-});
-const logsRes = await fetch(`${API_BASE}/logs`, {
-  headers: {
-    'x-api-key': 'your-super-secret-key'
+
+  document.getElementById("apiKey").innerText = key;
+
+  // Fetch usage
+  const res = await fetch('/api/usage', {
+    headers: { 'x-api-key': key }
+  });
+
+  const data = await res.json();
+
+  if (data.error) {
+    document.getElementById("usageText").innerText = data.error;
+    return;
   }
-});
+
+  document.getElementById("plan").innerText = data.plan;
+
+  document.getElementById("usageText").innerText =
+    `${data.used} / ${data.limit} requests today`;
+
+  const percent = (data.used / data.limit) * 100;
+  document.getElementById("usageFill").style.width = percent + "%";
+}
+
+function copyKey() {
+  const key = document.getElementById("apiKey").innerText;
+  navigator.clipboard.writeText(key);
+  alert("Copied!");
+}
+
+loadDashboard();
+</script>
+
+</body>
+</html>
