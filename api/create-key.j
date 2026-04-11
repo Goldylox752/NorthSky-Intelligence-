@@ -7,15 +7,40 @@ const supabase = createClient(
 );
 
 export default async function handler(req, res) {
-  const { userId } = req.body;
+  // Only allow POST
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
-  const newKey = crypto.randomBytes(32).toString('hex');
+  try {
+    const { userId } = req.body || {};
 
-  await supabase.from('api_keys').insert({
-    user_id: userId,
-    api_key: newKey,
-    plan: "free"
-  });
+    // fallback if no user system yet
+    const finalUserId = userId || 'anonymous_user';
 
-  res.status(200).json({ api_key: newKey });
+    // generate secure key
+    const newKey = crypto.randomBytes(32).toString('hex');
+
+    // insert into database
+    const { error } = await supabase
+      .from('api_keys')
+      .insert({
+        user_id: finalUserId,
+        api_key: newKey,
+        plan: 'paid',
+        usage: 0
+      });
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+
+    return res.status(200).json({ apiKey: newKey });
+
+  } catch (err) {
+    return res.status(500).json({
+      error: 'Server error',
+      details: err.message
+    });
+  }
 }
