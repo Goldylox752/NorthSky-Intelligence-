@@ -14,8 +14,28 @@ app.use(cors());
 app.set("trust proxy", true);
 
 /* ================= CACHE ================= */
-const cache = {};
 const CACHE_TIME = 1000 * 60 * 20;
+const cache = new Map();
+
+function getCache(key) {
+  const item = cache.get(key);
+  if (!item) return null;
+
+  if (Date.now() - item.t > CACHE_TIME) {
+    cache.delete(key);
+    return null;
+  }
+
+  return item.d;
+}
+
+function setCache(key, data) {
+  if (cache.size > 500) {
+    const firstKey = cache.keys().next().value;
+    cache.delete(firstKey);
+  }
+  cache.set(key, { d: data, t: Date.now() });
+}
 
 /* ================= RATE LIMIT ================= */
 const usage = {};
@@ -44,55 +64,54 @@ function getHeaders() {
 }
 
 /* ================= RETRY ================= */
-async function retry(fn, retries = 3, delay = 800) {
+async function retry(fn, retries = 3) {
   for (let i = 0; i < retries; i++) {
     try {
       const res = await fn();
-      if (res) return res;
+      if (res && typeof res === "object" && Object.keys(res).length > 0) {
+        return res;
+      }
     } catch {}
-    await new Promise(r => setTimeout(r, delay * (i + 1)));
+    await new Promise(r => setTimeout(r, 500 * (i + 1)));
   }
   return null;
 }
 
 /* ================= SAFE RACE ================= */
-async function raceRequests(promises, ms = 10000) {
+async function raceRequests(tasks, ms = 10000) {
   return new Promise((resolve) => {
-    let done = false;
+    let finished = false;
 
-    promises.forEach(p => {
-      p.then(res => {
-        if (!done && res) {
-          done = true;
+    tasks.forEach(task => {
+      task().then(res => {
+        if (!finished && res) {
+          finished = true;
           resolve(res);
         }
       }).catch(() => {});
     });
 
     setTimeout(() => {
-      if (!done) resolve(null);
+      if (!finished) resolve(null);
     }, ms);
   });
 }
 
 /* ================= QUEUE ================= */
+const MAX_WORKERS = 3;
+let activeWorkers = 0;
 const queue = [];
-let active = false;
 
-async function processQueue() {
-  if (active) return;
-  active = true;
+function runNext() {
+  if (activeWorkers >= MAX_WORKERS || queue.length === 0) return;
 
-  while (queue.length) {
-    const job = queue.shift();
-    try {
-      await job();
-    } catch (e) {
-      console.error("Queue error:", e.message);
-    }
-  }
+  const job = queue.shift();
+  activeWorkers++;
 
-  active = false;
+  job().finally(() => {
+    activeWorkers--;
+    runNext();
+  });
 }
 
 function addToQueue(fn) {
@@ -101,7 +120,7 @@ function addToQueue(fn) {
       const result = await fn();
       resolve(result);
     });
-    processQueue();
+    runNext();
   });
 }
 
@@ -154,8 +173,8 @@ async function tiktokAPI2(url) {
 
 async function handleTikTok(url) {
   return raceRequests([
-    tiktokAPI1(url),
-    tiktokAPI2(url),
+    () => tiktokAPI1(url),
+    () => tiktokAPI2(url),
   ]);
 }
 
@@ -220,43 +239,51 @@ async function fetchProxy(url) {
 
 async function fetchSmart(url) {
   return raceRequests([
-    fetchDirect(url),
-    fetchProxy(url)
+    () => fetchDirect(url),
+    () => fetchProxy(url),
   ]);
 }
 
 /* ================= ROUTES ================= */
 
 app.get("/", (req, res) => {
-  res.send("🚀 NorthSky COBALT v2 LIVE");
+  res.send("🚀 NorthSky COBALT v2 FIXED");
 });
 
 app.get("/api/rip", async (req, res) => {
   let responded = false;
 
-  function send(data) {
+  const send = (data) => {
     if (!responded) {
       responded = true;
       res.json(data);
     }
-  }
+  };
+
+  const timeout = setTimeout(() => {
+    send({ success: false, error: "timeout" });
+  }, 15000);
 
   try {
     let { url } = req.query;
-    if (!url) return send({ success: false });
+    if (!url) {
+      clearTimeout(timeout);
+      return send({ success: false });
+    }
 
     if (!url.startsWith("http")) url = "https://" + url;
 
     console.log("Incoming:", url);
 
-    const cached = cache[url];
-    if (cached && Date.now() - cached.t < CACHE_TIME) {
-      return send(cached.d);
+    const cached = getCache(url);
+    if (cached) {
+      clearTimeout(timeout);
+      return send(cached);
     }
 
     const platform = detectPlatform(url);
 
-    let data = await addToQueue(async () => {
+    const data = await addToQueue(async () => {
       if (platform === "tiktok") return handleTikTok(url);
       if (platform === "instagram") return handleInstagram(url);
       if (platform === "youtube") return handleYouTube(url);
@@ -272,7 +299,8 @@ app.get("/api/rip", async (req, res) => {
         download: data.download || null,
       };
 
-      cache[url] = { d: resData, t: Date.now() };
+      setCache(url, resData);
+      clearTimeout(timeout);
       return send(resData);
     }
 
@@ -298,12 +326,13 @@ app.get("/api/rip", async (req, res) => {
       metadata: meta,
     };
 
-    cache[url] = { d: resData, t: Date.now() };
-
+    setCache(url, resData);
+    clearTimeout(timeout);
     send(resData);
 
   } catch (e) {
     console.error("ERROR:", e.message);
+    clearTimeout(timeout);
     send({ success: false });
   }
 });
@@ -312,5 +341,5 @@ app.get("/api/rip", async (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log("🚀 COBALT v2 RUNNING on " + PORT);
+  console.log("🚀 COBALT FIXED RUNNING on " + PORT);
 });
