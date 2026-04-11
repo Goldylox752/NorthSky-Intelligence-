@@ -1,51 +1,93 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>NorthSky Intelligence</title>
 
 <style>
 body {
   margin: 0;
-  font-family: Arial;
-  background: #0b1220;
-  color: #e5e7eb;
+  font-family: -apple-system, BlinkMacSystemFont, Arial;
+  background: linear-gradient(135deg, #0f172a, #1e293b);
+  color: white;
 }
 
-.container { max-width: 900px; margin: auto; padding: 28px; }
+.container {
+  max-width: 900px;
+  margin: auto;
+  padding: 30px;
+}
 
-.hero { text-align: center; padding: 40px 10px; }
+/* HERO */
+.hero {
+  text-align: center;
+  padding: 40px 10px;
+}
 
-.hero h1 { color: #38bdf8; font-size: 34px; }
+.hero h1 {
+  font-size: 36px;
+  margin-bottom: 10px;
+}
 
-input, select, button {
+.hero p {
+  opacity: 0.8;
+}
+
+/* INPUT */
+input {
   width: 100%;
-  padding: 12px;
-  margin-top: 12px;
+  padding: 14px;
+  margin-top: 20px;
   border-radius: 10px;
   border: none;
 }
 
-button { cursor: pointer; font-weight: bold; }
+/* BUTTONS */
+button {
+  width: 100%;
+  padding: 14px;
+  margin-top: 12px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
+  font-size: 16px;
+}
 
-.primary { background: #38bdf8; color: black; }
-.buy { background: #22c55e; color: black; }
+.primary {
+  background: linear-gradient(135deg, #38bdf8, #6366f1);
+  color: white;
+}
 
+.buy {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: black;
+}
+
+/* OUTPUT */
 #output {
   margin-top: 20px;
   padding: 15px;
   background: #0f172a;
   border-radius: 10px;
-  min-height: 80px;
+  min-height: 100px;
   white-space: pre-wrap;
+}
+
+/* FEATURES */
+.features {
+  text-align: center;
+  margin-top: 40px;
+  opacity: 0.8;
 }
 
 /* PAYWALL */
 .paywall {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.85);
+  background: rgba(0,0,0,0.9);
   display: none;
   align-items: center;
   justify-content: center;
@@ -56,7 +98,7 @@ button { cursor: pointer; font-weight: bold; }
   padding: 30px;
   border-radius: 14px;
   text-align: center;
-  max-width: 420px;
+  max-width: 400px;
 }
 </style>
 </head>
@@ -65,17 +107,27 @@ button { cursor: pointer; font-weight: bold; }
 
 <div class="container">
 
+  <!-- HERO -->
   <div class="hero">
     <h1>🌌 NorthSky Intelligence</h1>
-    <p>Turn any website into intelligence instantly</p>
+    <p>Turn any website into AI-powered intelligence instantly</p>
   </div>
 
+  <!-- INPUT -->
   <input id="lead" placeholder="Enter website URL or business..." />
 
   <button class="primary" onclick="runAI()">Generate Report</button>
-  <button class="buy" onclick="buyAccess()">💳 Unlock Access</button>
+  <button class="buy" onclick="buyAccess()">💳 Unlock Full Access - $20</button>
 
+  <!-- OUTPUT -->
   <div id="output">Ready.</div>
+
+  <!-- FEATURES -->
+  <div class="features">
+    <p>✔ No monthly fees</p>
+    <p>✔ Instant API access</p>
+    <p>✔ 100 AI requests included</p>
+  </div>
 
 </div>
 
@@ -83,13 +135,13 @@ button { cursor: pointer; font-weight: bold; }
 <div id="paywall" class="paywall">
   <div class="paywall-box">
     <h2>🔒 Access Locked</h2>
-    <p>Unlock to continue</p>
-    <button class="buy" onclick="buyAccess()">Unlock</button>
+    <p>Unlock to generate full reports</p>
+    <button class="buy" onclick="buyAccess()">Unlock Now</button>
   </div>
 </div>
 
 <script>
-const STRIPE_LINK = "https://buy.stripe.com/fZueV63mz4mw2Fx2UU2ZO0w";
+const STRIPE_LINK = "https://buy.stripe.com/28E14gcX91ak2FxgLK2ZO0x";
 
 /* ---------------- PAYWALL ---------------- */
 
@@ -123,7 +175,7 @@ async function runAI() {
   const output = document.getElementById("output");
 
   if (!input.trim()) {
-    output.innerText = "Enter input";
+    output.innerText = "Enter a website or business";
     return;
   }
 
@@ -137,13 +189,13 @@ async function runAI() {
   output.innerText = "Analyzing...";
 
   try {
-    const res = await fetch("/api/generate", {
+    const res = await fetch("/api/ai", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-api-key": apiKey
       },
-      body: JSON.stringify({ message: input })
+      body: JSON.stringify({ prompt: input })
     });
 
     const data = await res.json();
