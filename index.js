@@ -1,223 +1,257 @@
-/* =========================
-   TRENDING (YOUTUBE RSS)
-========================= */
-app.get('/trending', async (req, res) => {
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NorthSky Intelligence</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+
+<style>
+body {
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  background: radial-gradient(circle at top, #0f172a, #020617);
+  color: #e2e8f0;
+}
+
+.container {
+  max-width: 1000px;
+  margin: auto;
+  padding: 30px;
+}
+
+.hero {
+  text-align: center;
+  padding: 60px 20px 30px;
+}
+
+.hero h1 {
+  font-size: 40px;
+}
+
+.hero p {
+  opacity: 0.7;
+}
+
+.input-box {
+  display: flex;
+  gap: 10px;
+  background: rgba(30,41,59,0.5);
+  padding: 10px;
+  border-radius: 14px;
+}
+
+input {
+  flex: 1;
+  padding: 14px;
+  border-radius: 10px;
+  border: none;
+  background: #020617;
+  color: white;
+}
+
+button {
+  padding: 14px 20px;
+  border-radius: 10px;
+  border: none;
+  background: linear-gradient(135deg,#3b82f6,#6366f1);
+  color: white;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.secondary {
+  background: rgba(255,255,255,0.08);
+}
+
+.card {
+  background: rgba(30,41,59,0.6);
+  border-radius: 16px;
+  padding: 20px;
+  margin-top: 25px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+}
+
+img {
+  width: 100%;
+  border-radius: 10px;
+  margin-top: 10px;
+}
+
+.loader {
+  margin-top: 20px;
+  opacity: 0.6;
+}
+
+.history div {
+  cursor: pointer;
+  padding: 6px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <div class="hero">
+    <h1>🚀 NorthSky Intelligence</h1>
+    <p>Turn any URL into AI-powered insights</p>
+  </div>
+
+  <div class="input-box">
+    <input id="urlInput" placeholder="Paste URL..." />
+    <button onclick="runAI()">Analyze</button>
+  </div>
+
+  <div class="actions">
+    <button class="secondary" onclick="getTrending()">🔥 Trending</button>
+  </div>
+
+  <div class="loader" id="loader"></div>
+  <div id="output"></div>
+  <div class="history" id="history"></div>
+
+</div>
+
+<script>
+const API_URL = "https://northsky-ai.onrender.com";
+
+/* ================= INIT ================= */
+if (!localStorage.getItem("history")) {
+  localStorage.setItem("history", JSON.stringify([]));
+}
+renderHistory();
+
+/* ================= ANALYZE ================= */
+async function runAI() {
+  const url = document.getElementById("urlInput").value;
+  const output = document.getElementById("output");
+  const loader = document.getElementById("loader");
+
+  if (!url.trim()) {
+    output.innerHTML = "<div class='card'>Enter a URL</div>";
+    return;
+  }
+
+  loader.innerText = "⚡ Analyzing...";
+  output.innerHTML = "";
+
   try {
-    const rssUrl = "https://www.youtube.com/feeds/videos.xml?chart=mostPopular";
+    const res = await fetch(`${API_URL}/rip?url=${encodeURIComponent(url)}`);
+    const data = await res.json();
 
-    const { data } = await axios.get(rssUrl);
+    loader.innerText = "";
 
-    const videos = [...data.matchAll(/<entry>(.*?)<\/entry>/gs)].slice(0, 5);
-
-    const results = [];
-
-    for (let v of videos) {
-      const chunk = v[1];
-
-      const title = chunk.match(/<title>(.*?)<\/title>/)?.[1] || "";
-      const link = chunk.match(/<link rel="alternate" href="(.*?)"/)?.[1];
-
-      if (!link) continue;
-
-      // reuse your own system
-      const fakeReq = { query: { url: link } };
-
-      // OPTIONAL: quick metadata instead of full scrape
-      results.push({
-        title,
-        url: link
-      });
+    if (!data.success) {
+      output.innerHTML = `<div class='card'>Error</div>`;
+      return;
     }
 
-    return res.json({
-      success: true,
-      results
-    });
+    render(data);
+    saveHistory(url);
 
-  } catch (e) {
-    return res.status(500).json({
-      error: "Trending fetch failed"
-    });
+  } catch {
+    loader.innerText = "";
+    output.innerHTML = "<div class='card'>Connection failed</div>";
   }
-});
-
-
-
-
-const express = require('express');
-const axios = require('axios');
-const cors = require('cors');
-
-const metascraper = require('metascraper')([
-  require('metascraper-title')(),
-  require('metascraper-description')(),
-  require('metascraper-image')()
-]);
-
-const app = express();
-app.use(cors());
-
-/* =========================
-   OPENAI
-========================= */
-let openai = null;
-
-try {
-  const OpenAI = require("openai");
-  openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-  });
-} catch {
-  console.log("No OpenAI");
 }
 
-/* =========================
-   HELPERS
-========================= */
-function detectPlatform(url) {
-  if (url.includes("youtube.com") || url.includes("youtu.be")) return "youtube";
-  return "website";
-}
+/* ================= TRENDING ================= */
+async function getTrending() {
+  const output = document.getElementById("output");
 
-function handleYouTube(url) {
-  const idMatch = url.match(/(?:v=|youtu\.be\/)([^?&]+)/);
-  const videoId = idMatch ? idMatch[1] : null;
-
-  if (!videoId) {
-    return {
-      title: "YouTube Video",
-      description: "Invalid YouTube URL",
-      image: null,
-      thumbnail: null,
-      embed: null,
-      platform: "youtube",
-      url
-    };
-  }
-
-  return {
-    title: `YouTube Video (${videoId})`,
-    description: "Video content optimized for engagement",
-    image: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
-    thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
-    embed: `https://www.youtube.com/embed/${videoId}`,
-    platform: "youtube",
-    videoId,
-    url
-  };
-}
-
-/* =========================
-   ROUTE
-========================= */
-app.get('/rip', async (req, res) => {
-  const { url } = req.query;
-
-  if (!url) {
-    return res.status(400).json({ error: 'URL required' });
-  }
+  output.innerHTML = "<div class='card'>🔥 Loading trends...</div>";
 
   try {
-    let metadata = {};
-    let platform = detectPlatform(url);
-    let source = '';
+    const res = await fetch(`${API_URL}/trending`);
+    const data = await res.json();
 
-    /* PLATFORM HANDLING */
-    if (platform === "youtube") {
-      metadata = handleYouTube(url);
-      source = "youtube";
-    } else {
-      const { data: html } = await axios.get(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        timeout: 15000
-      });
+    let html = "<div class='card'><h2>🔥 Trending</h2>";
 
-      metadata = await metascraper({ html, url });
-      source = "website";
-    }
-
-    /* FALLBACK */
-    metadata.title = metadata.title || "Untitled Page";
-    metadata.description = metadata.description || "No description";
-
-    /* SCREENSHOT */
-    const screenshot = `https://image.thum.io/get/fullpage/${encodeURIComponent(url)}`;
-
-    /* =========================
-       AI INTELLIGENCE
-    ========================= */
-    let analysis = null;
-
-    if (openai && (metadata.title || metadata.description)) {
-      try {
-        const ai = await openai.chat.completions.create({
-          model: "gpt-4.1-mini",
-          response_format: { type: "json_object" },
-          messages: [
-            {
-              role: "system",
-              content: "You are a marketing intelligence engine. Only return valid JSON."
-            },
-            {
-              role: "user",
-              content: `
-Analyze this content:
-
-Title: ${metadata.title}
-Description: ${metadata.description}
-Platform: ${platform}
-
-Return JSON:
-{
-  "summary": "...",
-  "hook": "...",
-  "target_audience": "...",
-  "monetization_angle": "...",
-  "viral_score": 1-10
-}
-              `
-            }
-          ]
-        });
-
-        const raw = ai.choices?.[0]?.message?.content;
-
-        try {
-          analysis = raw ? JSON.parse(raw) : null;
-        } catch {
-          analysis = { raw };
-        }
-
-      } catch (e) {
-        console.log("AI ERROR:", e.message);
-      }
-    }
-
-    /* RESPONSE */
-    return res.json({
-      success: true,
-      source,
-      platform,
-      metadata,
-      screenshot,
-      analysis
+    data.results.forEach(item => {
+      html += `
+        <div style="margin-top:10px;">
+          <b>${item.title}</b><br>
+          <button onclick="analyzeTrending('${item.url}')">Analyze</button>
+        </div>
+      `;
     });
 
-  } catch (err) {
-    console.error(err.message);
+    html += "</div>";
+    output.innerHTML = html;
 
-    return res.status(500).json({
-      error: 'Server error',
-      details: err.message
-    });
+  } catch {
+    output.innerHTML = "<div class='card'>Failed to load</div>";
   }
-});
+}
 
-/* =========================
-   START SERVER (RENDER SAFE)
-========================= */
-const PORT = process.env.PORT || 3000;
+function analyzeTrending(url) {
+  document.getElementById("urlInput").value = url;
+  runAI();
+}
 
-app.listen(PORT, () => {
-  console.log(`🚀 Running on port ${PORT}`);
-});
+/* ================= RENDER ================= */
+function render(data) {
+  const output = document.getElementById("output");
+  const meta = data.metadata || {};
+  const ai = data.analysis;
+
+  output.innerHTML = `
+    <div class="card">
+      <h2>${meta.title || "Untitled"}</h2>
+      <p>${meta.description || ""}</p>
+      ${meta.image ? `<img src="${meta.image}">` : ""}
+    </div>
+
+    ${ai ? `
+      <div class="card">
+        <h3>🧠 AI Intelligence</h3>
+        <div class="grid">
+          <div><b>Summary</b><p>${ai.summary}</p></div>
+          <div><b>Hook</b><p>${ai.hook}</p></div>
+          <div><b>Audience</b><p>${ai.target_audience}</p></div>
+          <div><b>Money</b><p>${ai.monetization_angle}</p></div>
+        </div>
+        <p><b>🔥 Viral Score:</b> ${ai.viral_score}/10</p>
+      </div>
+    ` : ""}
+  `;
+}
+
+/* ================= HISTORY ================= */
+function saveHistory(url) {
+  let history = JSON.parse(localStorage.getItem("history"));
+  history.unshift(url);
+  history = history.slice(0,5);
+  localStorage.setItem("history", JSON.stringify(history));
+  renderHistory();
+}
+
+function renderHistory() {
+  const history = JSON.parse(localStorage.getItem("history"));
+  const el = document.getElementById("history");
+
+  el.innerHTML = "<h4>Recent</h4>" +
+    history.map(h => `<div onclick="reuse('${h}')">${h}</div>`).join("");
+}
+
+function reuse(url) {
+  document.getElementById("urlInput").value = url;
+}
+</script>
+
+</body>
+</html>
