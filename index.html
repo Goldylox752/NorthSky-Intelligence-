@@ -4,132 +4,178 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NorthSky Intelligence</title>
-
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 body {
   margin: 0;
-  font-family: -apple-system, Arial;
-  background: linear-gradient(135deg, #0f172a, #1e293b);
-  color: white;
+  font-family: 'Inter', sans-serif;
+  background: radial-gradient(circle at top, #0f172a, #020617);
+  color: #e2e8f0;
 }
 
 .container {
-  max-width: 900px;
+  max-width: 1000px;
   margin: auto;
   padding: 30px;
 }
 
+/* HERO */
 .hero {
   text-align: center;
-  padding: 40px 20px;
+  padding: 60px 20px 40px;
 }
 
 .hero h1 {
-  font-size: 34px;
+  font-size: 38px;
   margin-bottom: 10px;
 }
 
 .hero p {
-  opacity: 0.8;
-  font-size: 16px;
+  opacity: 0.7;
+}
+
+/* INPUT */
+.input-box {
+  display: flex;
+  gap: 10px;
+  background: rgba(30, 41, 59, 0.5);
+  padding: 10px;
+  border-radius: 14px;
+  backdrop-filter: blur(10px);
 }
 
 input {
-  width: 100%;
+  flex: 1;
   padding: 14px;
   border-radius: 10px;
   border: none;
-  margin-top: 20px;
+  background: #020617;
+  color: white;
+  font-size: 14px;
 }
 
 button {
-  width: 100%;
-  padding: 14px;
-  margin-top: 10px;
+  padding: 14px 20px;
   border-radius: 10px;
   border: none;
-  cursor: pointer;
-  font-weight: bold;
-}
-
-.primary {
-  background: linear-gradient(135deg, #38bdf8, #6366f1);
+  background: linear-gradient(135deg, #3b82f6, #6366f1);
   color: white;
+  cursor: pointer;
+  font-weight: 600;
 }
 
-#output {
+button:hover {
+  opacity: 0.9;
+}
+
+/* FEATURES */
+.features {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
   margin-top: 20px;
-  padding: 20px;
-  background: #0f172a;
-  border-radius: 10px;
 }
 
+.features div {
+  background: rgba(30, 41, 59, 0.4);
+  padding: 12px;
+  border-radius: 10px;
+  text-align: center;
+  font-size: 14px;
+  opacity: 0.85;
+}
+
+/* CARDS */
+.card {
+  background: rgba(30, 41, 59, 0.6);
+  border-radius: 16px;
+  padding: 20px;
+  margin-top: 25px;
+  backdrop-filter: blur(12px);
+}
+
+img {
+  width: 100%;
+  border-radius: 10px;
+  margin-top: 10px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+}
+
+.label {
+  font-size: 12px;
+  opacity: 0.6;
+  margin-bottom: 4px;
+}
+
+.badge {
+  margin-top: 10px;
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: #22c55e;
+  font-size: 12px;
+}
+
+/* STATUS */
 .loader {
   text-align: center;
   margin-top: 20px;
-  display: none;
-}
-
-.features {
-  margin-top: 20px;
-  opacity: 0.85;
-  font-size: 14px;
+  opacity: 0.6;
 }
 
 .usage {
   margin-top: 10px;
   font-size: 13px;
+  opacity: 0.6;
+}
+
+/* HISTORY */
+.history {
+  margin-top: 30px;
+}
+
+.history h4 {
+  margin-bottom: 10px;
   opacity: 0.7;
 }
 
-.history {
-  margin-top: 30px;
-  font-size: 14px;
-  opacity: 0.8;
+.history div {
+  padding: 6px;
+  cursor: pointer;
+  border-radius: 6px;
+  font-size: 13px;
 }
 
-.history div {
-  cursor: pointer;
-  padding: 5px;
+.history div:hover {
+  background: rgba(255,255,255,0.05);
 }
 </style>
 </head>
-
 <body>
-
 <div class="container">
-
-  <!-- HERO -->
   <div class="hero">
-    <h1>Turn Any Website Into Actionable Intelligence</h1>
-    <p>Analyze competitors, extract insights, and generate AI reports in seconds.</p>
+    <h1>🚀 NorthSky Intelligence</h1>
+    <p>Turn any URL into AI-powered marketing insights</p>
   </div>
-
-  <!-- INPUT -->
-  <input id="lead" placeholder="Enter a website URL (e.g. nike.com)" />
-  <button class="primary" onclick="runAI()">Analyze Website</button>
-
-  <!-- VALUE -->
+  <div class="input-box">
+    <input id="urlInput" placeholder="Paste any URL (YouTube, website...)" />
+    <button onclick="runAI()">Analyze</button>
+  </div>
   <div class="features">
-    <p>✔ Extract key insights instantly</p>
-    <p>✔ Understand competitors</p>
-    <p>✔ AI-powered analysis</p>
+    <div>⚡ Instant Insights</div>
+    <div>🧠 AI Analysis</div>
+    <div>📈 Growth Ideas</div>
   </div>
-
-  <!-- USAGE -->
   <div class="usage" id="usage"></div>
-
-  <!-- LOADER -->
-  <div class="loader" id="loader">⚡ Generating AI report...</div>
-
-  <!-- OUTPUT -->
-  <div id="output">Ready.</div>
-
-  <!-- HISTORY -->
+  <div class="loader" id="loader"></div>
+  <div id="output"></div>
   <div class="history" id="history"></div>
-
 </div>
-
 <script>
 const API_URL = "https://northsky-ai.onrender.com";
 
@@ -149,68 +195,88 @@ renderHistory();
 
 /* MAIN */
 async function runAI() {
-  const input = document.getElementById("lead").value;
+  const url = document.getElementById("urlInput").value;
   const output = document.getElementById("output");
   const loader = document.getElementById("loader");
 
-  if (!input.trim()) {
-    output.innerText = "Enter a website URL";
+  if (!url.trim()) {
+    output.innerHTML = "<div class='card'>Enter a URL</div>";
     return;
   }
 
-  loader.style.display = "block";
-  output.innerText = "";
+  loader.innerText = "⚡ Analyzing...";
+  output.innerHTML = "";
 
   try {
-    const res = await fetch(
-      `${API_URL}/rip?url=${encodeURIComponent(input)}`,
-      {
-        headers: {
-          "x-api-key": localStorage.getItem("api_key")
-        }
+    const res = await fetch(`${API_URL}/rip?url=${encodeURIComponent(url)}`, {
+      headers: {
+        "x-api-key": localStorage.getItem("api_key")
       }
-    );
+    });
 
     const data = await res.json();
-    loader.style.display = "none";
+    loader.innerText = "";
 
     if (!res.ok) {
-      output.innerText = data?.error || "Something went wrong";
+      output.innerHTML = `<div class='card'>${data.error}</div>`;
       return;
     }
 
-    /* AI MODE */
-    if (data?.analysis) {
-      output.innerHTML = `
-        <h2>🧠 Intelligence Report</h2>
-        <div style="margin-top:10px; line-height:1.6;">
-          ${data.analysis}
-        </div>
-      `;
-
-      saveHistory(input);
-      incrementUsage();
-      return;
-    }
-
-    /* FALLBACK */
-    const title = data?.title || "No title";
-    const description = data?.description || "No description";
-    const image = data?.thumbnail;
-
-    output.innerHTML = `
-      <h3>${title}</h3>
-      <p>${description}</p>
-      ${image ? `<img src="${image}" style="max-width:100%; border-radius:10px;" />` : ""}
-    `;
-
-    saveHistory(input);
+    render(data);
+    saveHistory(url);
     incrementUsage();
 
   } catch (e) {
-    loader.style.display = "none";
-    output.innerText = "Connection failed";
+    loader.innerText = "";
+    output.innerHTML = "<div class='card'>Connection failed</div>";
   }
+}
+
+/* RENDER */
+function render(data) {
+  const output = document.getElementById("output");
+
+  output.innerHTML = `
+    <div class="card">
+      <h2>${data.metadata.title}</h2>
+      <p>${data.metadata.description}</p>
+
+      ${data.metadata.image ? `<img src="${data.metadata.image}" />` : ""}
+      ${data.screenshot ? `<img src="${data.screenshot}" />` : ""}
+
+      <div class="label">Platform: ${data.platform}</div>
+    </div>
+
+    ${data.analysis ? `
+      <div class="card">
+        <h3>🧠 AI Intelligence</h3>
+
+        <div class="grid">
+          <div>
+            <div class="label">Summary</div>
+            <p>${data.analysis.summary}</p>
+          </div>
+
+          <div>
+            <div class="label">Hook</div>
+            <p>${data.analysis.hook}</p>
+          </div>
+
+          <div>
+            <div class="label">Audience</div>
+            <p>${data.analysis.target_audience}</p>
+          </div>
+
+          <div>
+            <div class="label">Monetization</div>
+            <p>${data.analysis.monetization_angle}</p>
+          </div>
+        </div>
+
+        <div class="badge">Viral Score: ${data.analysis.viral_score}</div>
+      </div>
+    ` : ""}
+  `;
 }
 
 /* HISTORY */
@@ -231,7 +297,7 @@ function renderHistory() {
 }
 
 function reuse(url) {
-  document.getElementById("lead").value = url;
+  document.getElementById("urlInput").value = url;
 }
 
 /* USAGE */
@@ -248,6 +314,40 @@ function updateUsage() {
     `Usage: ${usage}/100 requests`;
 }
 </script>
-
 </body>
 </html>
+:::
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
