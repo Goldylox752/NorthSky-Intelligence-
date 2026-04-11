@@ -1,78 +1,56 @@
-const express = require('express');
-const axios = require('axios');
-const cors = require('cors');
-
+/* ================= IMPORTS ================= */
+const express = require("express");
+const axios = require("axios");
+const cors = require("cors");
 const chromium = require("@sparticuz/chromium");
 const puppeteer = require("puppeteer-core");
+const PQueue = require("p-queue");
 
-const PQueue = require('p-queue');
-
-const metascraper = require('metascraper')([
-  require('metascraper-title')(),
-  require('metascraper-description')(),
-  require('metascraper-image')()
+const metascraper = require("metascraper")([
+  require("metascraper-title")(),
+  require("metascraper-description")(),
+  require("metascraper-image")(),
 ]);
 
+/* ================= INIT ================= */
 const app = express();
-
-/* ================= CORE ================= */
 app.use(cors());
-app.set('trust proxy', true);
+app.set("trust proxy", true);
+
+/* ================= ERROR LOGGING ================= */
+process.on("unhandledRejection", (err) => {
+  console.error("UNHANDLED REJECTION:", err);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("UNCAUGHT EXCEPTION:", err);
+});
 
 /* ================= CACHE ================= */
 const cache = {};
 const CACHE_TIME = 1000 * 60 * 30;
 
-/* ================= QUEUE ================= */
-const queue = new PQueue({
-  concurrency: 2
-});
-
-/* ================= USAGE ================= */
+/* ================= RATE LIMIT ================= */
 const usage = {};
 
 function checkUsage(req, res, next) {
   const ip = req.ip;
-
   usage[ip] = (usage[ip] || 0) + 1;
 
   if (usage[ip] > 50) {
     return res.status(403).json({
       success: false,
       error: "Upgrade required",
-      upgrade: true
     });
   }
 
   next();
 }
 
-app.use('/api/', checkUsage);
+app.use("/api/", checkUsage);
 
-/* ================= OPENAI ================= */
-let openai = null;
-
-try {
-  const OpenAI = require("openai");
-  openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-  });
-} catch {
-  console.log("❌ No OpenAI key");
-}
-
-/* ================= TIMEOUT ================= */
-const timeoutPromise = (ms) =>
-  new Promise((_, reject) =>
-    setTimeout(() => reject(new Error("Timeout")), ms)
-  );
-
-async function safeFetch(url) {
-  return Promise.race([
-    fetchHTML(url),
-    timeoutPromise(25000)
-  ]);
-}
+/* ================= QUEUE ================= */
+const queue = new PQueue({ concurrency: 2 });
 
 /* ================= BROWSER ================= */
 let browser;
@@ -80,146 +58,103 @@ let browser;
 async function getBrowser() {
   if (!browser) {
     browser = await puppeteer.launch({
-      args: chromium.args,
+      args: [
+        ...chromium.args,
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--single-process",
+      ],
       executablePath: await chromium.executablePath(),
-      headless: chromium.headless
+      headless: true,
     });
 
     console.log("🚀 Chromium launched");
   }
-
   return browser;
 }
 
-/* ================= PUPPETEER ================= */
+/* ================= FETCH METHODS ================= */
 async function fetchWithBrowser(url) {
   let page;
 
   try {
     const browser = await getBrowser();
-
     page = await browser.newPage();
 
     await page.setUserAgent("Mozilla/5.0");
 
     await page.goto(url, {
       waitUntil: "domcontentloaded",
-      timeout: 20000
+      timeout: 20000,
     });
 
     const html = await page.content();
-
     console.log("🟢 Puppeteer success");
-    return html;
 
+    return html;
   } catch (e) {
     console.log("🔴 Puppeteer failed:", e.message);
     return null;
-
   } finally {
     if (page) await page.close();
   }
 }
 
-/* ================= FETCH HTML ================= */
 async function fetchHTML(url) {
-
-  // 1️⃣ FAST REQUEST
+  // 1️⃣ Normal request
   try {
     const { data } = await axios.get(url, {
       headers: { "User-Agent": "Mozilla/5.0" },
-      timeout: 8000
+      timeout: 8000,
     });
 
     console.log("✅ Normal worked");
     return data;
-
   } catch {
     console.log("❌ Normal failed");
   }
 
-  // 2️⃣ PROXY
+  // 2️⃣ Proxy fallback
   try {
-    const proxyURL = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+    const proxyURL = `https://api.allorigins.win/raw?url=${encodeURIComponent(
+      url
+    )}`;
     const { data } = await axios.get(proxyURL, { timeout: 12000 });
 
     console.log("🟡 Proxy worked");
     return data;
-
   } catch {
     console.log("❌ Proxy failed");
   }
 
-  // 3️⃣ QUEUED PUPPETEER
-  return await queue.add(() => fetchWithBrowser(url));
+  // 3️⃣ Puppeteer fallback (queued)
+  return queue.add(() => fetchWithBrowser(url));
 }
 
-/* ================= AI ================= */
-async function runAI(metadata, url) {
-
-  if (!openai) {
-    return {
-      summary: `Content from ${url}`,
-      hook: "Likely engaging content",
-      target_audience: "Online users",
-      monetization_angle: "Ads / affiliate",
-      viral_score: Math.floor(Math.random() * 5) + 5
-    };
-  }
-
+/* ================= SAFE FETCH ================= */
+async function safeFetch(url) {
   try {
-    const ai = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content: "Return ONLY valid JSON."
-        },
-        {
-          role: "user",
-          content: `
-Analyze:
-
-URL: ${url}
-Title: ${metadata.title}
-Description: ${metadata.description}
-
-Return JSON:
-{
-  "summary": "...",
-  "hook": "...",
-  "target_audience": "...",
-  "monetization_angle": "...",
-  "viral_score": 1-10
-}`
-        }
-      ]
-    });
-
-    return JSON.parse(ai.choices[0].message.content);
-
-  } catch (e) {
-    console.log("⚠️ AI failed:", e.message);
-
-    return {
-      summary: "Fallback analysis",
-      hook: "Likely engaging topic",
-      target_audience: "Online users",
-      monetization_angle: "Ads / affiliate",
-      viral_score: Math.floor(Math.random() * 5) + 5
-    };
+    return await Promise.race([
+      fetchHTML(url),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Timeout")), 25000)
+      ),
+    ]);
+  } catch (err) {
+    console.error("safeFetch error:", err.message);
+    throw err;
   }
 }
 
-/* ================= RIP ================= */
-app.get('/api/rip', async (req, res) => {
+/* ================= ROUTES ================= */
+app.get("/api/rip", async (req, res) => {
   let { url } = req.query;
 
   if (!url) {
     return res.status(400).json({
       success: false,
-      error: "URL required"
+      error: "URL required",
     });
   }
 
@@ -229,7 +164,7 @@ app.get('/api/rip', async (req, res) => {
 
   console.log("🔍", url);
 
-  /* CACHE */
+  // Cache check
   const cached = cache[url];
   if (cached && Date.now() - cached.timestamp < CACHE_TIME) {
     console.log("⚡ Cache hit");
@@ -242,7 +177,7 @@ app.get('/api/rip', async (req, res) => {
     let metadata = {
       title: "Unknown Page",
       description: "No description",
-      image: null
+      image: null,
     };
 
     let scraped = false;
@@ -254,69 +189,39 @@ app.get('/api/rip', async (req, res) => {
         metadata = {
           title: data.title || metadata.title,
           description: data.description || metadata.description,
-          image: data.image || null
+          image: data.image || null,
         };
 
         scraped = true;
-        console.log("✅ Scraped");
-
       } catch {
         console.log("⚠️ metascraper failed");
       }
     }
 
-    const screenshot = `https://image.thum.io/get/fullpage/${encodeURIComponent(url)}`;
-
-    const analysis = await runAI(metadata, url);
+    const screenshot = `https://image.thum.io/get/fullpage/${encodeURIComponent(
+      url
+    )}`;
 
     const responseData = {
       success: true,
       scraped,
       metadata,
       screenshot,
-      analysis
     };
 
     cache[url] = {
       data: responseData,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     };
 
-    return res.json(responseData);
-
+    res.json(responseData);
   } catch (err) {
     console.log("❌ ERROR:", err.message);
 
-    return res.status(500).json({
+    res.status(500).json({
       success: false,
-      error: "Server failure"
+      error: "Server failure",
     });
-  }
-});
-
-/* ================= TRENDING ================= */
-app.get('/api/trending', async (req, res) => {
-  try {
-    const { data } = await axios.get(
-      "https://www.youtube.com/feeds/videos.xml?chart=mostPopular"
-    );
-
-    const videos = [...data.matchAll(/<entry>(.*?)<\/entry>/gs)].slice(0, 6);
-
-    const results = videos.map(v => {
-      const chunk = v[1];
-
-      return {
-        title: chunk.match(/<title>(.*?)<\/title>/)?.[1] || "Video",
-        url: chunk.match(/href="(.*?)"/)?.[1]
-      };
-    });
-
-    res.json({ success: true, results });
-
-  } catch (e) {
-    console.log("⚠️ Trending failed:", e.message);
-    res.status(500).json({ success: false });
   }
 });
 
