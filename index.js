@@ -2,6 +2,10 @@ const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
 
+const puppeteer = require('puppeteer-extra');
+const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+puppeteer.use(StealthPlugin());
+
 const metascraper = require('metascraper')([
   require('metascraper-title')(),
   require('metascraper-description')(),
@@ -16,9 +20,9 @@ app.set('trust proxy', true);
 
 /* ================= CACHE ================= */
 const cache = {};
-const CACHE_TIME = 1000 * 60 * 30; // 30 min
+const CACHE_TIME = 1000 * 60 * 30;
 
-/* ================= USAGE LIMIT ================= */
+/* ================= USAGE ================= */
 const usage = {};
 
 function checkUsage(req, res, next) {
@@ -51,40 +55,76 @@ try {
   console.log("❌ No OpenAI key");
 }
 
-/* ================= FETCH HTML (FIXED) ================= */
-async function fetchHTML(url) {
+/* ================= PUPPETEER ================= */
+async function fetchWithBrowser(url) {
+  let browser;
 
-  // 1️⃣ Normal request
   try {
-    const { data } = await axios.get(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "Accept-Language": "en-US,en;q=0.9"
-      },
-      timeout: 10000
+    browser = await puppeteer.launch({
+      headless: true,
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage"
+      ]
     });
 
-    console.log("✅ Normal scrape worked");
-    return data;
+    const page = await browser.newPage();
+
+    await page.setUserAgent("Mozilla/5.0");
+
+    await page.goto(url, {
+      waitUntil: "networkidle2",
+      timeout: 25000
+    });
+
+    const html = await page.content();
+
+    console.log("🟢 Puppeteer worked");
+    return html;
 
   } catch (e) {
+    console.log("🔴 Puppeteer failed:", e.message);
+    return null;
+
+  } finally {
+    if (browser) await browser.close();
+  }
+}
+
+/* ================= FETCH HTML ================= */
+async function fetchHTML(url) {
+
+  // 1️⃣ FAST REQUEST
+  try {
+    const { data } = await axios.get(url, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+      timeout: 8000
+    });
+
+    console.log("✅ Normal worked");
+    return data;
+
+  } catch {
     console.log("❌ Normal failed");
   }
 
-  // 2️⃣ Reliable free proxy (BEST fallback)
+  // 2️⃣ PROXY
   try {
     const proxyURL = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+    const { data } = await axios.get(proxyURL, { timeout: 12000 });
 
-    const { data } = await axios.get(proxyURL, {
-      timeout: 15000
-    });
-
-    console.log("✅ Proxy fallback worked");
+    console.log("🟡 Proxy worked");
     return data;
 
-  } catch (e) {
-    console.log("❌ Proxy fallback failed");
+  } catch {
+    console.log("❌ Proxy failed");
   }
+
+  // 3️⃣ PUPPETEER (REAL BROWSER)
+  const browserHTML = await fetchWithBrowser(url);
+
+  if (browserHTML) return browserHTML;
 
   return null;
 }
@@ -92,13 +132,12 @@ async function fetchHTML(url) {
 /* ================= AI ================= */
 async function runAI(metadata, url) {
 
-  // 🔥 fallback if no OpenAI
   if (!openai) {
     return {
       summary: `Content from ${url}`,
-      hook: "Likely optimized for engagement",
+      hook: "Likely engaging content",
       target_audience: "Online users",
-      monetization_angle: "Ads / affiliate / product",
+      monetization_angle: "Ads / affiliate",
       viral_score: Math.floor(Math.random() * 5) + 5
     };
   }
@@ -115,7 +154,7 @@ async function runAI(metadata, url) {
         {
           role: "user",
           content: `
-Analyze this:
+Analyze:
 
 URL: ${url}
 Title: ${metadata.title}
@@ -139,9 +178,9 @@ Return JSON:
     console.log("⚠️ AI failed:", e.message);
 
     return {
-      summary: "AI fallback analysis",
-      hook: "Engaging content pattern",
-      target_audience: "Internet users",
+      summary: "Fallback analysis",
+      hook: "Likely engaging topic",
+      target_audience: "Online users",
       monetization_angle: "Ads / affiliate",
       viral_score: Math.floor(Math.random() * 5) + 5
     };
@@ -163,9 +202,9 @@ app.get('/api/rip', async (req, res) => {
     url = "https://" + url;
   }
 
-  console.log("🔍 URL:", url);
+  console.log("🔍", url);
 
-  /* ⚡ CACHE */
+  /* CACHE */
   const cached = cache[url];
   if (cached && Date.now() - cached.timestamp < CACHE_TIME) {
     console.log("⚡ Cache hit");
@@ -177,7 +216,7 @@ app.get('/api/rip', async (req, res) => {
 
     let metadata = {
       title: "Unknown Page",
-      description: "No description available",
+      description: "No description",
       image: null
     };
 
@@ -194,13 +233,11 @@ app.get('/api/rip', async (req, res) => {
         };
 
         scraped = true;
-        console.log("✅ Scrape success");
+        console.log("✅ Scraped");
 
       } catch {
         console.log("⚠️ metascraper failed");
       }
-    } else {
-      console.log("❌ No HTML fetched");
     }
 
     const screenshot = `https://image.thum.io/get/fullpage/${encodeURIComponent(url)}`;
@@ -215,7 +252,6 @@ app.get('/api/rip', async (req, res) => {
       analysis
     };
 
-    /* 💾 CACHE SAVE */
     cache[url] = {
       data: responseData,
       timestamp: Date.now()
@@ -263,7 +299,7 @@ app.get('/api/trending', async (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 Running on ${PORT}`);
 });
 
 module.exports = app;
