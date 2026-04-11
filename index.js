@@ -2,9 +2,6 @@
 const express = require("express");
 const axios = require("axios");
 const cors = require("cors");
-const chromium = require("@sparticuz/chromium");
-const puppeteer = require("puppeteer-core");
-const PQueue = require("p-queue").default; // ✅ FIXED
 
 const metascraper = require("metascraper")([
   require("metascraper-title")(),
@@ -37,10 +34,10 @@ function checkUsage(req, res, next) {
   const ip = req.ip;
   usage[ip] = (usage[ip] || 0) + 1;
 
-  if (usage[ip] > 50) {
+  if (usage[ip] > 100) {
     return res.status(403).json({
       success: false,
-      error: "Upgrade required",
+      error: "Rate limit hit",
     });
   }
 
@@ -49,107 +46,66 @@ function checkUsage(req, res, next) {
 
 app.use("/api/", checkUsage);
 
-/* ================= QUEUE ================= */
-const queue = new PQueue({
-  concurrency: 2,
-});
-
-/* ================= BROWSER ================= */
-let browser;
-
-async function getBrowser() {
-  if (!browser) {
-    browser = await puppeteer.launch({
-      args: [
-        ...chromium.args,
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--single-process",
-      ],
-      executablePath: await chromium.executablePath(),
-      headless: true,
-    });
-
-    console.log("🚀 Chromium launched");
-  }
-  return browser;
-}
-
-/* ================= FETCH METHODS ================= */
-async function fetchWithBrowser(url) {
-  let page;
-
-  try {
-    const browserInstance = await getBrowser();
-    page = await browserInstance.newPage();
-
-    await page.setUserAgent("Mozilla/5.0");
-
-    await page.goto(url, {
-      waitUntil: "domcontentloaded",
-      timeout: 20000,
-    });
-
-    const html = await page.content();
-    console.log("🟢 Puppeteer success");
-
-    return html;
-  } catch (e) {
-    console.log("🔴 Puppeteer failed:", e.message);
-    return null;
-  } finally {
-    if (page) await page.close();
-  }
-}
-
+/* ================= FETCH HTML ================= */
 async function fetchHTML(url) {
-  // 1️⃣ Normal request
+  // 1️⃣ Direct request (fast)
   try {
     const { data } = await axios.get(url, {
-      headers: { "User-Agent": "Mozilla/5.0" },
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      },
       timeout: 8000,
     });
 
-    console.log("✅ Normal worked");
+    console.log("✅ Direct fetch worked");
     return data;
-  } catch {
-    console.log("❌ Normal failed");
+  } catch (err) {
+    console.log("❌ Direct failed:", err.message);
   }
 
   // 2️⃣ Proxy fallback
   try {
-    const proxyURL = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+    const proxyURL = `https://api.allorigins.win/raw?url=${encodeURIComponent(
+      url
+    )}`;
+
     const { data } = await axios.get(proxyURL, {
       timeout: 12000,
     });
 
     console.log("🟡 Proxy worked");
     return data;
-  } catch {
-    console.log("❌ Proxy failed");
+  } catch (err) {
+    console.log("❌ Proxy failed:", err.message);
   }
 
-  // 3️⃣ Puppeteer fallback (queued)
-  return queue.add(() => fetchWithBrowser(url));
+  return null;
 }
 
 /* ================= SAFE FETCH ================= */
 async function safeFetch(url) {
-  try {
-    return await Promise.race([
-      fetchHTML(url),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Timeout")), 25000)
-      ),
-    ]);
-  } catch (err) {
-    console.error("safeFetch error:", err.message);
-    throw err;
-  }
+  return Promise.race([
+    fetchHTML(url),
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Timeout")), 15000)
+    ),
+  ]);
 }
 
 /* ================= ROUTES ================= */
+
+// Root (so no "Not Found")
+app.get("/", (req, res) => {
+  res.send("🚀 NorthSky API running (no puppeteer)");
+});
+
+// Test route
+app.get("/api/test", (req, res) => {
+  res.json({ success: true });
+});
+
+// Main scraper
 app.get("/api/rip", async (req, res) => {
   let { url } = req.query;
 
@@ -166,7 +122,7 @@ app.get("/api/rip", async (req, res) => {
 
   console.log("🔍", url);
 
-  // Cache check
+  // Cache
   const cached = cache[url];
   if (cached && Date.now() - cached.timestamp < CACHE_TIME) {
     console.log("⚡ Cache hit");
@@ -176,38 +132,39 @@ app.get("/api/rip", async (req, res) => {
   try {
     const html = await safeFetch(url);
 
+    if (!html) {
+      return res.json({
+        success: false,
+        error: "Failed to fetch site",
+      });
+    }
+
     let metadata = {
-      title: "Unknown Page",
+      title: "Unknown",
       description: "No description",
       image: null,
     };
 
-    let scraped = false;
+    try {
+      const data = await metascraper({ html, url });
 
-    if (html) {
-      try {
-        const data = await metascraper({ html, url });
+      metadata = {
+        title: data.title || metadata.title,
+        description: data.description || metadata.description,
+        image: data.image || null,
+      };
 
-        metadata = {
-          title: data.title || metadata.title,
-          description: data.description || metadata.description,
-          image: data.image || null,
-        };
-
-        scraped = true;
-        console.log("✅ Scraped");
-      } catch {
-        console.log("⚠️ metascraper failed");
-      }
+      console.log("✅ Scraped metadata");
+    } catch (err) {
+      console.log("⚠️ metascraper failed:", err.message);
     }
-
-    const screenshot = `https://image.thum.io/get/fullpage/${encodeURIComponent(url)}`;
 
     const responseData = {
       success: true,
-      scraped,
       metadata,
-      screenshot,
+      screenshot: `https://image.thum.io/get/fullpage/${encodeURIComponent(
+        url
+      )}`,
     };
 
     cache[url] = {
@@ -219,9 +176,9 @@ app.get("/api/rip", async (req, res) => {
   } catch (err) {
     console.log("❌ ERROR:", err.message);
 
-    return res.status(500).json({
+    return res.json({
       success: false,
-      error: "Server failure",
+      error: err.message,
     });
   }
 });
