@@ -16,11 +16,10 @@ app.set("trust proxy", true);
 
 /* ================= ERROR LOGGING ================= */
 process.on("unhandledRejection", (err) => {
-  console.error("UNHANDLED REJECTION:", err);
+  console.error("UNHANDLED:", err);
 });
-
 process.on("uncaughtException", (err) => {
-  console.error("UNCAUGHT EXCEPTION:", err);
+  console.error("CRASH:", err);
 });
 
 /* ================= CACHE ================= */
@@ -29,26 +28,84 @@ const CACHE_TIME = 1000 * 60 * 30;
 
 /* ================= RATE LIMIT ================= */
 const usage = {};
-
-function checkUsage(req, res, next) {
+app.use("/api/", (req, res, next) => {
   const ip = req.ip;
   usage[ip] = (usage[ip] || 0) + 1;
 
   if (usage[ip] > 100) {
-    return res.status(403).json({
-      success: false,
-      error: "Rate limit hit",
-    });
+    return res.status(429).json({ success: false, error: "Rate limit" });
   }
 
   next();
+});
+
+/* ================= PLATFORM DETECTION ================= */
+function detectPlatform(url) {
+  if (/tiktok\.com/.test(url)) return "tiktok";
+  if (/instagram\.com/.test(url)) return "instagram";
+  if (/youtube\.com|youtu\.be/.test(url)) return "youtube";
+  return "web";
 }
 
-app.use("/api/", checkUsage);
+/* ================= SOCIAL HANDLERS ================= */
+
+async function handleTikTok(url) {
+  try {
+    const api = `https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`;
+    const { data } = await axios.get(api, { timeout: 10000 });
+
+    if (!data || !data.data) return null;
+
+    return {
+      title: data.data.title,
+      description: data.data.title,
+      image: data.data.cover,
+      video: data.data.play,
+      author: data.data.author?.nickname,
+      platform: "tiktok",
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function handleInstagram(url) {
+  try {
+    const api = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+    const { data } = await axios.get(api, { timeout: 10000 });
+
+    const match = data.match(/"og:image" content="(.*?)"/);
+
+    return {
+      title: "Instagram Post",
+      description: "Instagram content",
+      image: match?.[1] || null,
+      platform: "instagram",
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function handleYouTube(url) {
+  try {
+    const { data } = await axios.get(
+      `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`
+    );
+
+    return {
+      title: data.title,
+      description: data.author_name,
+      image: data.thumbnail_url,
+      platform: "youtube",
+    };
+  } catch {
+    return null;
+  }
+}
 
 /* ================= FETCH HTML ================= */
 async function fetchHTML(url) {
-  // 1️⃣ Direct request (fast)
   try {
     const { data } = await axios.get(url, {
       headers: {
@@ -58,26 +115,20 @@ async function fetchHTML(url) {
       timeout: 8000,
     });
 
-    console.log("✅ Direct fetch worked");
+    console.log("✅ Direct fetch");
     return data;
-  } catch (err) {
-    console.log("❌ Direct failed:", err.message);
+  } catch {
+    console.log("❌ Direct failed");
   }
 
-  // 2️⃣ Proxy fallback
   try {
-    const proxyURL = `https://api.allorigins.win/raw?url=${encodeURIComponent(
-      url
-    )}`;
+    const proxyURL = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+    const { data } = await axios.get(proxyURL, { timeout: 12000 });
 
-    const { data } = await axios.get(proxyURL, {
-      timeout: 12000,
-    });
-
-    console.log("🟡 Proxy worked");
+    console.log("🟡 Proxy fetch");
     return data;
-  } catch (err) {
-    console.log("❌ Proxy failed:", err.message);
+  } catch {
+    console.log("❌ Proxy failed");
   }
 
   return null;
@@ -95,17 +146,17 @@ async function safeFetch(url) {
 
 /* ================= ROUTES ================= */
 
-// Root (so no "Not Found")
+// Root
 app.get("/", (req, res) => {
-  res.send("🚀 NorthSky API running (no puppeteer)");
+  res.send("🚀 NorthSky API (Smart + Social Ready)");
 });
 
-// Test route
+// Test
 app.get("/api/test", (req, res) => {
   res.json({ success: true });
 });
 
-// Main scraper
+// Main API
 app.get("/api/rip", async (req, res) => {
   let { url } = req.query;
 
@@ -130,6 +181,35 @@ app.get("/api/rip", async (req, res) => {
   }
 
   try {
+    /* ================= SOCIAL BYPASS ================= */
+    const platform = detectPlatform(url);
+
+    if (platform !== "web") {
+      let result = null;
+
+      if (platform === "tiktok") result = await handleTikTok(url);
+      if (platform === "instagram") result = await handleInstagram(url);
+      if (platform === "youtube") result = await handleYouTube(url);
+
+      if (result) {
+        const response = {
+          success: true,
+          platform,
+          metadata: result,
+        };
+
+        cache[url] = {
+          data: response,
+          timestamp: Date.now(),
+        };
+
+        return res.json(response);
+      }
+
+      console.log("⚠️ Social fallback failed → trying web scrape");
+    }
+
+    /* ================= NORMAL SCRAPE ================= */
     const html = await safeFetch(url);
 
     if (!html) {
@@ -154,17 +234,16 @@ app.get("/api/rip", async (req, res) => {
         image: data.image || null,
       };
 
-      console.log("✅ Scraped metadata");
-    } catch (err) {
-      console.log("⚠️ metascraper failed:", err.message);
+      console.log("✅ Metadata scraped");
+    } catch {
+      console.log("⚠️ metascraper failed");
     }
 
     const responseData = {
       success: true,
+      platform: "web",
       metadata,
-      screenshot: `https://image.thum.io/get/fullpage/${encodeURIComponent(
-        url
-      )}`,
+      screenshot: `https://image.thum.io/get/fullpage/${encodeURIComponent(url)}`,
     };
 
     cache[url] = {
@@ -173,6 +252,7 @@ app.get("/api/rip", async (req, res) => {
     };
 
     return res.json(responseData);
+
   } catch (err) {
     console.log("❌ ERROR:", err.message);
 
