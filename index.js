@@ -1,6 +1,7 @@
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
+
 const metascraper = require('metascraper')([
   require('metascraper-title')(),
   require('metascraper-description')(),
@@ -33,16 +34,29 @@ function detectPlatform(url) {
 }
 
 function handleYouTube(url) {
-  const idMatch = url.match(/(?:v=|youtu\.be\/)([^&]+)/);
+  const idMatch = url.match(/(?:v=|youtu\.be\/)([^?&]+)/);
   const videoId = idMatch ? idMatch[1] : null;
 
+  if (!videoId) {
+    return {
+      title: "YouTube Video",
+      description: "Invalid YouTube URL",
+      image: null,
+      thumbnail: null,
+      embed: null,
+      platform: "youtube",
+      url
+    };
+  }
+
   return {
-    title: "YouTube Video",
-    description: "Video content",
-    image: videoId
-      ? `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`
-      : null,
+    title: `YouTube Video (${videoId})`,
+    description: "Video content optimized for engagement",
+    image: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+    thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+    embed: `https://www.youtube.com/embed/${videoId}`,
     platform: "youtube",
+    videoId,
     url
   };
 }
@@ -62,13 +76,14 @@ app.get('/rip', async (req, res) => {
     let platform = detectPlatform(url);
     let source = '';
 
-    /* PLATFORM */
+    /* PLATFORM HANDLING */
     if (platform === "youtube") {
       metadata = handleYouTube(url);
       source = "youtube";
     } else {
       const { data: html } = await axios.get(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0' }
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        timeout: 15000
       });
 
       metadata = await metascraper({ html, url });
@@ -82,32 +97,57 @@ app.get('/rip', async (req, res) => {
     /* SCREENSHOT */
     const screenshot = `https://image.thum.io/get/fullpage/${encodeURIComponent(url)}`;
 
-    /* AI */
+    /* =========================
+       AI INTELLIGENCE
+    ========================= */
     let analysis = null;
 
-    if (openai) {
+    if (openai && (metadata.title || metadata.description)) {
       try {
         const ai = await openai.chat.completions.create({
           model: "gpt-4.1-mini",
           response_format: { type: "json_object" },
           messages: [
             {
+              role: "system",
+              content: "You are a marketing intelligence engine. Only return valid JSON."
+            },
+            {
               role: "user",
-              content: `Analyze this:
+              content: `
+Analyze this content:
+
 Title: ${metadata.title}
 Description: ${metadata.description}
+Platform: ${platform}
 
-Return JSON with summary and viral_score`
+Return JSON:
+{
+  "summary": "...",
+  "hook": "...",
+  "target_audience": "...",
+  "monetization_angle": "...",
+  "viral_score": 1-10
+}
+              `
             }
           ]
         });
 
-        analysis = JSON.parse(ai.choices[0].message.content);
+        const raw = ai.choices?.[0]?.message?.content;
+
+        try {
+          analysis = raw ? JSON.parse(raw) : null;
+        } catch {
+          analysis = { raw };
+        }
+
       } catch (e) {
-        console.log("AI failed");
+        console.log("AI ERROR:", e.message);
       }
     }
 
+    /* RESPONSE */
     return res.json({
       success: true,
       source,
@@ -128,8 +168,10 @@ Return JSON with summary and viral_score`
 });
 
 /* =========================
-   START
+   START SERVER (RENDER SAFE)
 ========================= */
-app.listen(3000, () => {
-  console.log("Running on 3000");
+const PORT = process.env.PORT || 3000;
+
+app.listen(PORT, () => {
+  console.log(`🚀 Running on port ${PORT}`);
 });
