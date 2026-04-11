@@ -11,15 +11,19 @@ const metascraper = require('metascraper')([
 
 const app = express();
 
-/* ================= CORE SETUP ================= */
+/* ================= CORE ================= */
 app.use(cors());
-app.set('trust proxy', true); // ✅ IMPORTANT (real IP on Render)
+app.set('trust proxy', true);
+
+/* ================= CACHE ================= */
+const cache = {};
+const CACHE_TIME = 1000 * 60 * 30; // 30 minutes
 
 /* ================= USAGE LIMIT ================= */
 const usage = {};
 
 function checkUsage(req, res, next) {
-  const ip = req.ip; // ✅ FIXED (better than headers)
+  const ip = req.ip;
 
   usage[ip] = (usage[ip] || 0) + 1;
 
@@ -33,7 +37,6 @@ function checkUsage(req, res, next) {
   next();
 }
 
-/* APPLY LIMIT TO API ONLY */
 app.use('/api/', checkUsage);
 
 /* ================= OPENAI ================= */
@@ -48,7 +51,7 @@ try {
   console.log("❌ No OpenAI key");
 }
 
-/* ================= FREE PROXIES ================= */
+/* ================= PROXIES ================= */
 const proxies = [
   "http://103.149.162.194:80",
   "http://51.158.68.68:8811",
@@ -61,8 +64,6 @@ function getProxy() {
 
 /* ================= FETCH HTML ================= */
 async function fetchHTML(url) {
-
-  // 1️⃣ NORMAL
   try {
     const { data } = await axios.get(url, {
       headers: {
@@ -71,16 +72,11 @@ async function fetchHTML(url) {
       },
       timeout: 10000
     });
-
     return data;
-  } catch (e) {
-    console.log("⚠️ Normal failed:", e.message);
-  }
+  } catch {}
 
-  // 2️⃣ FREE PROXY
   try {
-    const proxy = getProxy();
-    const agent = new HttpsProxyAgent(proxy);
+    const agent = new HttpsProxyAgent(getProxy());
 
     const { data } = await axios.get(url, {
       httpsAgent: agent,
@@ -89,19 +85,14 @@ async function fetchHTML(url) {
     });
 
     return data;
-  } catch (e) {
-    console.log("⚠️ Proxy failed:", e.message);
-  }
+  } catch {}
 
-  // 3️⃣ PAID PROXY
   if (process.env.SCRAPER_API_KEY) {
     try {
       const proxyURL = `https://api.zenrows.com/v1/?apikey=${process.env.SCRAPER_API_KEY}&url=${encodeURIComponent(url)}`;
       const { data } = await axios.get(proxyURL);
       return data;
-    } catch {
-      console.log("⚠️ Paid proxy failed");
-    }
+    } catch {}
   }
 
   return null;
@@ -110,7 +101,6 @@ async function fetchHTML(url) {
 /* ================= AI ================= */
 async function runAI(metadata, url) {
   if (!openai) {
-    // ✅ fallback even without OpenAI
     return {
       summary: "Basic content detected",
       hook: "Potential engaging content",
@@ -152,9 +142,7 @@ Return JSON:
 
     return JSON.parse(ai.choices[0].message.content);
 
-  } catch (e) {
-    console.log("⚠️ AI failed:", e.message);
-
+  } catch {
     return {
       summary: "AI fallback analysis",
       hook: "Likely engaging topic",
@@ -165,7 +153,7 @@ Return JSON:
   }
 }
 
-/* ================= RIP ROUTE ================= */
+/* ================= RIP ================= */
 app.get('/api/rip', async (req, res) => {
   let { url } = req.query;
 
@@ -178,6 +166,17 @@ app.get('/api/rip', async (req, res) => {
 
   if (!url.startsWith("http")) {
     url = "https://" + url;
+  }
+
+  /* ⚡ CACHE CHECK FIRST */
+  const cached = cache[url];
+  if (cached && Date.now() - cached.timestamp < CACHE_TIME) {
+    console.log("⚡ Cache hit");
+
+    return res.json({
+      ...cached.data,
+      cached: true
+    });
   }
 
   try {
@@ -202,30 +201,33 @@ app.get('/api/rip', async (req, res) => {
         };
 
         scraped = true;
-      } catch {
-        console.log("⚠️ metascraper failed");
-      }
+      } catch {}
     }
 
     const screenshot = `https://image.thum.io/get/fullpage/${encodeURIComponent(url)}`;
 
     const analysis = await runAI(metadata, url);
 
-    return res.json({
+    const responseData = {
       success: true,
       scraped,
       metadata,
       screenshot,
       analysis
-    });
+    };
+
+    /* 💾 SAVE CACHE */
+    cache[url] = {
+      data: responseData,
+      timestamp: Date.now()
+    };
+
+    return res.json(responseData);
 
   } catch (err) {
-    console.log("❌ ERROR:", err.message);
-
     return res.status(500).json({
       success: false,
-      error: "Server failure",
-      debug: err.message
+      error: "Server failure"
     });
   }
 });
@@ -250,13 +252,12 @@ app.get('/api/trending', async (req, res) => {
 
     res.json({ success: true, results });
 
-  } catch (e) {
-    console.log("⚠️ Trending failed:", e.message);
+  } catch {
     res.status(500).json({ success: false });
   }
 });
 
-/* ================= START SERVER ================= */
+/* ================= START ================= */
 const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
