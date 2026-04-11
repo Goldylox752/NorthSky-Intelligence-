@@ -1,6 +1,8 @@
 const express = require('express');
 const axios = require('axios');
+const cors = require('cors');
 const YTDlpWrap = require('yt-dlp-wrap').default;
+
 const metascraper = require('metascraper')([
   require('metascraper-title')(),
   require('metascraper-description')(),
@@ -15,6 +17,8 @@ const app = express();
 const ytDlpWrap = new YTDlpWrap();
 const PORT = process.env.PORT || 3000;
 
+/* ✅ MIDDLEWARE */
+app.use(cors()); // ← FIXED HERE
 app.use(express.json());
 
 /* =========================
@@ -47,15 +51,13 @@ const authenticate = (req, res, next) => {
 ========================= */
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false
+  max: 20
 });
 
 app.use('/rip', limiter);
 
 /* =========================
-   HEALTH CHECK (IMPORTANT)
+   HEALTH CHECK
 ========================= */
 app.get('/', (req, res) => {
   res.send('🚀 NorthSky AI Engine is running');
@@ -76,23 +78,15 @@ app.get('/rip', authenticate, async (req, res) => {
       /youtube\.com|youtu\.be|tiktok\.com|twitter\.com|instagram\.com/.test(url);
 
     if (isVideo) {
-      try {
-        const metadata = await ytDlpWrap.getVideoInfo(url);
+      const metadata = await ytDlpWrap.getVideoInfo(url);
 
-        return res.json({
-          source: 'northsky-ai-yt-dlp',
-          title: metadata.title,
-          description: metadata.description,
-          thumbnail: metadata.thumbnail,
-          duration: metadata.duration_string
-        });
-
-      } catch (err) {
-        return res.status(500).json({
-          error: 'Video extraction failed',
-          details: err.message
-        });
-      }
+      return res.json({
+        source: 'northsky-ai-yt-dlp',
+        title: metadata.title,
+        description: metadata.description,
+        thumbnail: metadata.thumbnail,
+        duration: metadata.duration_string
+      });
     }
 
     const { data: html } = await axios.get(url, {
