@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>NorthSky Intelligence</title>
+
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 
 <style>
@@ -49,6 +50,14 @@ button {
   cursor: pointer;
 }
 
+button:hover {
+  opacity: 0.9;
+}
+
+.upgrade {
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+}
+
 .card {
   background: rgba(30,41,59,0.6);
   padding: 20px;
@@ -72,6 +81,7 @@ button {
 .history div {
   cursor: pointer;
   margin-top: 5px;
+  font-size: 13px;
 }
 </style>
 </head>
@@ -81,12 +91,13 @@ button {
 
   <div class="hero">
     <h1>🚀 NorthSky Intelligence</h1>
-    <p>Analyze + Compare + Find Viral Trends</p>
+    <p>Analyze • Compare • Discover Trends</p>
+    <button class="upgrade" onclick="upgrade()">💰 Upgrade</button>
   </div>
 
-  <!-- SINGLE ANALYSIS -->
+  <!-- ANALYZE -->
   <div class="input-box">
-    <input id="urlInput" placeholder="Enter URL" />
+    <input id="urlInput" placeholder="Enter URL..." />
     <button onclick="runAI()">Analyze</button>
   </div>
 
@@ -109,50 +120,65 @@ button {
 <script>
 const API_URL = "https://northsky-ai.onrender.com";
 
-/* LIMIT SYSTEM */
-const LIMIT = 10;
-
-function checkLimit() {
-  let usage = parseInt(localStorage.getItem("usage") || "0");
-  if (usage >= LIMIT) {
-    document.getElementById("output").innerHTML =
-      "<div class='card'>💰 Limit reached — upgrade required</div>";
-    return false;
-  }
-  return true;
-}
-
+/* ================= USAGE ================= */
 function incrementUsage() {
   let usage = parseInt(localStorage.getItem("usage") || "0");
   usage++;
   localStorage.setItem("usage", usage);
-  document.getElementById("usage").innerText =
-    `Usage: ${usage}/${LIMIT}`;
+  document.getElementById("usage").innerText = `Usage: ${usage}`;
 }
 
-/* ANALYZE */
-async function runAI() {
-  if (!checkLimit()) return;
+/* ================= UPGRADE ================= */
+async function upgrade() {
+  const res = await fetch(`${API_URL}/api/create-checkout`, {
+    method: "POST"
+  });
 
+  const data = await res.json();
+  window.location.href = data.url;
+}
+
+/* ================= ANALYZE ================= */
+async function runAI() {
   const url = document.getElementById("urlInput").value;
   const output = document.getElementById("output");
 
+  if (!url) {
+    output.innerHTML = "<div class='card'>Enter a URL</div>";
+    return;
+  }
+
   output.innerHTML = "<div class='card'>Analyzing...</div>";
 
-  const res = await fetch(`${API_URL}/api/rip?url=${encodeURIComponent(url)}`);
-  const data = await res.json();
+  try {
+    const res = await fetch(`${API_URL}/api/rip?url=${encodeURIComponent(url)}`);
+    const data = await res.json();
 
-  render(data);
-  saveHistory(url);
-  incrementUsage();
+    if (data.upgrade) {
+      output.innerHTML = `
+        <div class='card'>
+          💰 Free limit reached<br><br>
+          <button class="upgrade" onclick="upgrade()">Upgrade to Pro</button>
+        </div>
+      `;
+      return;
+    }
+
+    render(data);
+    saveHistory(url);
+    incrementUsage();
+
+  } catch {
+    output.innerHTML = "<div class='card'>Error loading</div>";
+  }
 }
 
-/* COMPARE */
+/* ================= COMPARE ================= */
 async function compare() {
-  if (!checkLimit()) return;
-
   const u1 = document.getElementById("url1").value;
   const u2 = document.getElementById("url2").value;
+
+  if (!u1 || !u2) return;
 
   const [r1, r2] = await Promise.all([
     fetch(`${API_URL}/api/rip?url=${encodeURIComponent(u1)}`).then(r => r.json()),
@@ -164,7 +190,7 @@ async function compare() {
 
   document.getElementById("output").innerHTML = `
     <div class="card">
-      <h2>⚔️ Competitor Comparison</h2>
+      <h2>⚔️ Comparison</h2>
 
       <p>${u1}</p>
       <div class="bar"><div class="fill" style="width:${v1 * 10}%"></div></div>
@@ -179,7 +205,7 @@ async function compare() {
   incrementUsage();
 }
 
-/* TRENDING */
+/* ================= TRENDING ================= */
 async function getTrending() {
   const res = await fetch(`${API_URL}/api/trending`);
   const data = await res.json();
@@ -204,15 +230,15 @@ function quickAnalyze(url) {
   runAI();
 }
 
-/* RENDER */
+/* ================= RENDER ================= */
 function render(data) {
   const ai = data.analysis || {};
   const score = ai.viral_score || 0;
 
   document.getElementById("output").innerHTML = `
     <div class="card">
-      <h2>${data.metadata.title}</h2>
-      <p>${data.metadata.description}</p>
+      <h2>${data.metadata?.title || "Untitled"}</h2>
+      <p>${data.metadata?.description || ""}</p>
 
       <h3>Viral Score: ${score}/10</h3>
       <div class="bar"><div class="fill" style="width:${score * 10}%"></div></div>
@@ -222,17 +248,18 @@ function render(data) {
   `;
 }
 
-/* HISTORY */
+/* ================= HISTORY ================= */
 function saveHistory(url) {
   let h = JSON.parse(localStorage.getItem("history") || "[]");
   h.unshift(url);
-  h = h.slice(0,5);
+  h = h.slice(0, 5);
   localStorage.setItem("history", JSON.stringify(h));
   renderHistory();
 }
 
 function renderHistory() {
   const h = JSON.parse(localStorage.getItem("history") || "[]");
+
   document.getElementById("history").innerHTML =
     "<h4>History</h4>" +
     h.map(x => `<div onclick="quickAnalyze('${x}')">${x}</div>`).join("");
