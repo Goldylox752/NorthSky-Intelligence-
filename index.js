@@ -1,165 +1,108 @@
-const express = require('express');
-const axios = require('axios');
-const cors = require('cors');
-
-const metascraper = require('metascraper')([
-  require('metascraper-title')(),
-  require('metascraper-description')(),
-  require('metascraper-image')(),
-  require('metascraper-video')()
-]);
-
-const rateLimit = require('express-rate-limit');
-const winston = require('winston');
-
 /* =========================
-   SAFE OPENAI LOAD
+   AI INTELLIGENCE LAYER
 ========================= */
-let openai = null;
+let analysis = null;
+let confidence = "low";
 
-try {
-  const OpenAI = require("openai");
-  openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-  });
-} catch (err) {
-  console.log("OpenAI not installed — skipping AI");
-}
-
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-/* =========================
-   MIDDLEWARE
-========================= */
-app.use(cors());
-app.use(express.json());
-
-/* =========================
-   LOGGER
-========================= */
-const logger = winston.createLogger({
-  level: 'info',
-  transports: [new winston.transports.Console()]
-});
-
-/* =========================
-   AUTH
-========================= */
-const API_KEY = process.env.NORTHSKY_AI_API_KEY || 'your-super-secret-key';
-
-const authenticate = (req, res, next) => {
-  const key = req.headers['x-api-key'];
-  if (key && key === API_KEY) return next();
-  return res.status(401).json({ error: 'Unauthorized' });
-};
-
-/* =========================
-   RATE LIMIT
-========================= */
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20
-});
-
-app.use('/rip', limiter);
-
-/* =========================
-   HEALTH CHECK
-========================= */
-app.get('/', (req, res) => {
-  res.send('🚀 NorthSky AI Engine is running');
-});
-
-/* =========================
-   RIP + AI ENGINE
-========================= */
-app.get('/rip', authenticate, async (req, res) => {
-  const { url } = req.query;
-
-  if (!url) {
-    return res.status(400).json({ error: 'URL required' });
-  }
-
+if (openai && (metadata.title || metadata.description)) {
   try {
-    let metadata = {};
-    let source = '';
+    const ai = await openai.chat.completions.create({
+      model: "gpt-4.1-mini",
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: "You are a marketing intelligence engine that ONLY returns valid JSON."
+        },
+        {
+          role: "user",
+          content: `
+Analyze this content:
 
-    /* ---------- VIDEO (DISABLED SAFELY) ---------- */
-    const isVideo =
-      /youtube\.com|youtu\.be|tiktok\.com|twitter\.com|instagram\.com/.test(url);
+Title: ${metadata.title || "N/A"}
+Description: ${metadata.description || "N/A"}
+Platform: ${platform}
 
-    if (isVideo) {
-      return res.json({
-        source: 'video-blocked',
-        title: 'Video detected',
-        description: 'Video extraction disabled for stability',
-        thumbnail: null,
-        analysis: "This appears to be a video platform. Video scraping is currently disabled, but this content likely focuses on media, engagement, or social distribution strategies."
-      });
-    }
+Return STRICT JSON:
 
-    /* ---------- WEBSITE ---------- */
-    const { data: html } = await axios.get(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-      timeout: 15000
+{
+  "summary": "short summary",
+  "hook": "why it grabs attention",
+  "target_audience": "who it's for",
+  "monetization_angle": "how to make money from this",
+  "viral_score": number (1-10)
+}
+          `
+        }
+      ]
     });
 
-    metadata = await metascraper({ html, url });
-    source = 'metascraper';
-
-    /* =========================
-       AI ANALYSIS (SAFE)
-    ========================= */
-    let analysis = null;
+    const raw = ai.choices?.[0]?.message?.content;
 
     try {
-      if (openai && metadata.description) {
-        const ai = await openai.chat.completions.create({
-          model: "gpt-4.1-mini",
-          messages: [
-            {
-              role: "user",
-              content: `
-Analyze this website:
-
-Title: ${metadata.title}
-Description: ${metadata.description}
-
-Give a short business + marketing insight summary.
-              `
-            }
-          ]
-        });
-
-        analysis = ai.choices?.[0]?.message?.content || null;
-      }
-    } catch (aiErr) {
-      logger.warn("AI failed: " + aiErr.message);
+      analysis = raw ? JSON.parse(raw) : null;
+      if (analysis?.viral_score) confidence = "high";
+    } catch (parseErr) {
+      logger.warn("JSON parse failed");
+      analysis = { raw };
     }
 
-    /* =========================
-       RESPONSE
-    ========================= */
-    return res.json({
-      source,
-      ...metadata,
-      analysis
-    });
-
-  } catch (err) {
-    logger.error(err.message);
-
-    return res.status(500).json({
-      error: 'NorthSky AI failed',
-      details: err.message
-    });
+  } catch (e) {
+    logger.warn("AI failed: " + e.message);
   }
-});
+}
 
 /* =========================
-   START SERVER
+   YOUTUBE HANDLER
 ========================= */
-app.listen(PORT, () => {
-  console.log(`🚀 NorthSky AI running on port ${PORT}`);
+function handleYouTube(url) {
+  const idMatch = url.match(/(?:v=|youtu\.be\/)([^&]+)/);
+  const videoId = idMatch ? idMatch[1] : null;
+
+  if (!videoId) {
+    return {
+      title: "YouTube Video",
+      description: "Invalid or unsupported YouTube URL",
+      image: null,
+      thumbnail: null,
+      embed: null,
+      platform: "youtube",
+      url
+    };
+  }
+
+  return {
+    title: "YouTube Video",
+    description: "Potential viral video content",
+    image: `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+    thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+    embed: `https://www.youtube.com/embed/${videoId}`,
+    platform: "youtube",
+    videoId,
+    url
+  };
+}
+
+/* =========================
+   METADATA FALLBACK
+========================= */
+metadata.title = metadata.title || "Untitled Page";
+metadata.description = metadata.description || "No description found";
+
+/* =========================
+   SCREENSHOT
+========================= */
+const screenshot = `https://image.thum.io/get/fullpage/${encodeURIComponent(url)}`;
+
+/* =========================
+   FINAL RESPONSE
+========================= */
+return res.json({
+  success: true,
+  source,
+  platform,
+  screenshot,
+  metadata,
+  analysis,
+  confidence
 });
