@@ -54,17 +54,20 @@ async function handleTikTok(url) {
     const api = `https://www.tikwm.com/api/?url=${encodeURIComponent(url)}`;
     const { data } = await axios.get(api, { timeout: 10000 });
 
-    if (!data || !data.data) return null;
+    if (!data?.data) return null;
 
     return {
       title: data.data.title,
       description: data.data.title,
       image: data.data.cover,
       video: data.data.play,
+      download: data.data.play,
+      music: data.data.music,
       author: data.data.author?.nickname,
       platform: "tiktok",
     };
-  } catch {
+  } catch (err) {
+    console.log("❌ TikTok failed");
     return null;
   }
 }
@@ -83,6 +86,7 @@ async function handleInstagram(url) {
       platform: "instagram",
     };
   } catch {
+    console.log("❌ Instagram failed");
     return null;
   }
 }
@@ -98,8 +102,10 @@ async function handleYouTube(url) {
       description: data.author_name,
       image: data.thumbnail_url,
       platform: "youtube",
+      note: "Download not enabled",
     };
   } catch {
+    console.log("❌ YouTube failed");
     return null;
   }
 }
@@ -148,10 +154,10 @@ async function safeFetch(url) {
 
 // Root
 app.get("/", (req, res) => {
-  res.send("🚀 NorthSky API (Smart + Social Ready)");
+  res.send("🚀 NorthSky API (Smart Scraper + Downloader)");
 });
 
-// Test
+// Health check
 app.get("/api/test", (req, res) => {
   res.json({ success: true });
 });
@@ -196,6 +202,8 @@ app.get("/api/rip", async (req, res) => {
           success: true,
           platform,
           metadata: result,
+          download: result.download || null,
+          video: result.video || null,
         };
 
         cache[url] = {
@@ -206,7 +214,7 @@ app.get("/api/rip", async (req, res) => {
         return res.json(response);
       }
 
-      console.log("⚠️ Social fallback failed → trying web scrape");
+      console.log("⚠️ Social fallback failed → using scraper");
     }
 
     /* ================= NORMAL SCRAPE ================= */
