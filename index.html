@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NorthSky Intelligence</title>
+
+<style>
+body {
+  margin: 0;
+  font-family: -apple-system, Arial;
+  background: linear-gradient(135deg, #0f172a, #1e293b);
+  color: white;
+}
+
+.container {
+  max-width: 900px;
+  margin: auto;
+  padding: 30px;
+}
+
+.hero {
+  text-align: center;
+  padding: 30px;
+}
+
+input {
+  width: 100%;
+  padding: 14px;
+  border-radius: 10px;
+  border: none;
+  margin-top: 15px;
+}
+
+button {
+  width: 100%;
+  padding: 14px;
+  margin-top: 10px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.primary {
+  background: linear-gradient(135deg, #38bdf8, #6366f1);
+  color: white;
+}
+
+#output {
+  margin-top: 20px;
+  padding: 15px;
+  background: #0f172a;
+  border-radius: 10px;
+}
+
+.loader {
+  text-align: center;
+  margin-top: 20px;
+  display: none;
+}
+
+.history {
+  margin-top: 30px;
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+.history div {
+  cursor: pointer;
+  padding: 5px;
+}
+
+.usage {
+  margin-top: 10px;
+  font-size: 13px;
+  opacity: 0.7;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <div class="hero">
+    <h1>🌌 NorthSky Intelligence</h1>
+    <p>AI-powered website intelligence</p>
+  </div>
+
+  <input id="lead" placeholder="Enter website URL..." />
+  <button class="primary" onclick="runAI()">Generate Report</button>
+
+  <div class="usage" id="usage"></div>
+
+  <div class="loader" id="loader">⚡ Analyzing with AI...</div>
+
+  <div id="output">Ready.</div>
+
+  <div class="history" id="history"></div>
+
+</div>
+
+<script>
+const API_URL = "https://YOUR-RENDER-APP.onrender.com";
+
+/* ---------------- INIT ---------------- */
+if (!localStorage.getItem("api_key")) {
+  localStorage.setItem("api_key", "your-super-secret-key");
+}
+
+if (!localStorage.getItem("usage")) {
+  localStorage.setItem("usage", "0");
+}
+
+if (!localStorage.getItem("history")) {
+  localStorage.setItem("history", JSON.stringify([]));
+}
+
+updateUsage();
+renderHistory();
+
+/* ---------------- MAIN ---------------- */
+async function runAI() {
+  const input = document.getElementById("lead").value;
+  const output = document.getElementById("output");
+  const loader = document.getElementById("loader");
+
+  if (!input.trim()) {
+    output.innerText = "Enter a URL";
+    return;
+  }
+
+  loader.style.display = "block";
+  output.innerText = "";
+
+  try {
+    const res = await fetch(
+      `${API_URL}/rip?url=${encodeURIComponent(input)}`,
+      {
+        headers: {
+          "x-api-key": localStorage.getItem("api_key")
+        }
+      }
+    );
+
+    const data = await res.json();
+    loader.style.display = "none";
+
+    if (!res.ok) {
+      output.innerText = data.error;
+      return;
+    }
+
+    /* ---------------- AI SUMMARY ---------------- */
+    const summary = generateSummary(data);
+
+    output.innerHTML = `
+      <h3>${data.title || "No title"}</h3>
+      <p>${summary}</p>
+      ${data.thumbnail ? `<img src="${data.thumbnail}" />` : ""}
+      <small>${data.source}</small>
+    `;
+
+    saveHistory(input);
+    incrementUsage();
+
+  } catch (e) {
+    loader.style.display = "none";
+    output.innerText = "Connection failed";
+  }
+}
+
+/* ---------------- AI SUMMARY ---------------- */
+function generateSummary(data) {
+  if (!data.description) return "No summary available.";
+
+  return `
+This page appears to be about: ${data.title}.
+It likely focuses on ${data.description.slice(0, 120)}...
+This could be useful for research, marketing insights, or competitive analysis.
+  `;
+}
+
+/* ---------------- HISTORY ---------------- */
+function saveHistory(url) {
+  let history = JSON.parse(localStorage.getItem("history"));
+  history.unshift(url);
+  history = history.slice(0, 5);
+  localStorage.setItem("history", JSON.stringify(history));
+  renderHistory();
+}
+
+function renderHistory() {
+  const history = JSON.parse(localStorage.getItem("history"));
+  const el = document.getElementById("history");
+
+  el.innerHTML = "<h4>Recent Searches</h4>" +
+    history.map(h => `<div onclick="reuse('${h}')">${h}</div>`).join("");
+}
+
+function reuse(url) {
+  document.getElementById("lead").value = url;
+}
+
+/* ---------------- USAGE ---------------- */
+function incrementUsage() {
+  let usage = parseInt(localStorage.getItem("usage"));
+  usage++;
+  localStorage.setItem("usage", usage);
+  updateUsage();
+}
+
+function updateUsage() {
+  const usage = localStorage.getItem("usage");
+  document.getElementById("usage").innerText =
+    `Usage: ${usage}/100 requests`;
+}
+</script>
+
+</body>
+</html>
