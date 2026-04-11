@@ -1,21 +1,22 @@
 {
   "name": "northsky-ai",
   "version": "1.0.0",
-  "main": "server.js",
-  "type": "commonjs",
+  "main": "index.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node index.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
     "axios": "^1.6.0",
-    "yt-dlp-wrap": "^2.3.12",
-    "metascraper": "^5.14.1",
-    "metascraper-title": "^5.14.1",
-    "metascraper-description": "^5.14.1",
-    "metascraper-image": "^5.14.1",
-    "metascraper-video": "^5.14.1",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.0.0",
+    "metascraper": "^5.30.0",
+    "metascraper-description": "^5.30.0",
+    "metascraper-image": "^5.30.0",
+    "metascraper-title": "^5.30.0",
+    "metascraper-video": "^5.30.0",
     "winston": "^3.10.0",
-    "express-rate-limit": "^7.0.0"
+    "yt-dlp-wrap": "^2.3.12",
+    "openai": "^4.0.0"
   }
 }
