@@ -1,7 +1,6 @@
 const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
-const YTDlpWrap = require('yt-dlp-wrap').default;
 
 const metascraper = require('metascraper')([
   require('metascraper-title')(),
@@ -28,7 +27,6 @@ try {
 }
 
 const app = express();
-const ytDlpWrap = new YTDlpWrap();
 const PORT = process.env.PORT || 3000;
 
 /* =========================
@@ -87,31 +85,28 @@ app.get('/rip', authenticate, async (req, res) => {
     let metadata = {};
     let source = '';
 
+    /* ---------- VIDEO (DISABLED SAFELY) ---------- */
     const isVideo =
       /youtube\.com|youtu\.be|tiktok\.com|twitter\.com|instagram\.com/.test(url);
 
-    /* ---------- VIDEO ---------- */
     if (isVideo) {
-      const video = await ytDlpWrap.getVideoInfo(url);
-
-      metadata = {
-        title: video.title,
-        description: video.description,
-        thumbnail: video.thumbnail
-      };
-
-      source = 'yt-dlp';
-    } 
-    /* ---------- WEBSITE ---------- */
-    else {
-      const { data: html } = await axios.get(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        timeout: 15000
+      return res.json({
+        source: 'video-blocked',
+        title: 'Video detected',
+        description: 'Video extraction disabled for stability',
+        thumbnail: null,
+        analysis: "This appears to be a video platform. Video scraping is currently disabled, but this content likely focuses on media, engagement, or social distribution strategies."
       });
-
-      metadata = await metascraper({ html, url });
-      source = 'metascraper';
     }
+
+    /* ---------- WEBSITE ---------- */
+    const { data: html } = await axios.get(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      timeout: 15000
+    });
+
+    metadata = await metascraper({ html, url });
+    source = 'metascraper';
 
     /* =========================
        AI ANALYSIS (SAFE)
@@ -149,7 +144,7 @@ Give a short business + marketing insight summary.
     return res.json({
       source,
       ...metadata,
-      analysis // 🔥 frontend uses this
+      analysis
     });
 
   } catch (err) {
