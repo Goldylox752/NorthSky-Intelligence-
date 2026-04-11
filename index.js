@@ -2,9 +2,10 @@ const express = require('express');
 const axios = require('axios');
 const cors = require('cors');
 
-const puppeteer = require('puppeteer-extra');
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
-puppeteer.use(StealthPlugin());
+const chromium = require("@sparticuz/chromium");
+const puppeteer = require("puppeteer-core");
+
+const PQueue = require('p-queue');
 
 const metascraper = require('metascraper')([
   require('metascraper-title')(),
@@ -21,6 +22,11 @@ app.set('trust proxy', true);
 /* ================= CACHE ================= */
 const cache = {};
 const CACHE_TIME = 1000 * 60 * 30;
+
+/* ================= QUEUE ================= */
+const queue = new PQueue({
+  concurrency: 2
+});
 
 /* ================= USAGE ================= */
 const usage = {};
@@ -55,32 +61,55 @@ try {
   console.log("❌ No OpenAI key");
 }
 
-/* ================= PUPPETEER ================= */
-async function fetchWithBrowser(url) {
-  let browser;
+/* ================= TIMEOUT ================= */
+const timeoutPromise = (ms) =>
+  new Promise((_, reject) =>
+    setTimeout(() => reject(new Error("Timeout")), ms)
+  );
 
-  try {
+async function safeFetch(url) {
+  return Promise.race([
+    fetchHTML(url),
+    timeoutPromise(25000)
+  ]);
+}
+
+/* ================= BROWSER ================= */
+let browser;
+
+async function getBrowser() {
+  if (!browser) {
     browser = await puppeteer.launch({
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage"
-      ]
+      args: chromium.args,
+      executablePath: await chromium.executablePath(),
+      headless: chromium.headless
     });
 
-    const page = await browser.newPage();
+    console.log("🚀 Chromium launched");
+  }
+
+  return browser;
+}
+
+/* ================= PUPPETEER ================= */
+async function fetchWithBrowser(url) {
+  let page;
+
+  try {
+    const browser = await getBrowser();
+
+    page = await browser.newPage();
 
     await page.setUserAgent("Mozilla/5.0");
 
     await page.goto(url, {
-      waitUntil: "networkidle2",
-      timeout: 25000
+      waitUntil: "domcontentloaded",
+      timeout: 20000
     });
 
     const html = await page.content();
 
-    console.log("🟢 Puppeteer worked");
+    console.log("🟢 Puppeteer success");
     return html;
 
   } catch (e) {
@@ -88,7 +117,7 @@ async function fetchWithBrowser(url) {
     return null;
 
   } finally {
-    if (browser) await browser.close();
+    if (page) await page.close();
   }
 }
 
@@ -121,12 +150,8 @@ async function fetchHTML(url) {
     console.log("❌ Proxy failed");
   }
 
-  // 3️⃣ PUPPETEER (REAL BROWSER)
-  const browserHTML = await fetchWithBrowser(url);
-
-  if (browserHTML) return browserHTML;
-
-  return null;
+  // 3️⃣ QUEUED PUPPETEER
+  return await queue.add(() => fetchWithBrowser(url));
 }
 
 /* ================= AI ================= */
@@ -212,7 +237,7 @@ app.get('/api/rip', async (req, res) => {
   }
 
   try {
-    const html = await fetchHTML(url);
+    const html = await safeFetch(url);
 
     let metadata = {
       title: "Unknown Page",
