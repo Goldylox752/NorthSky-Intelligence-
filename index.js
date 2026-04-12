@@ -1,121 +1,138 @@
-/* ================= IMPORTS ================= */
-const express = require("express");
-const axios = require("axios");
-const cors = require("cors");
+/* ================= TIMEOUT WRAPPER ================= */
+function withTimeout(promise, ms) {
+  let timer;
 
-const metascraper = require("metascraper")([
-  require("metascraper-title")(),
-  require("metascraper-description")(),
-  require("metascraper-image")(),
-]);
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error("Request timeout"));
+      }, ms);
+    })
+  ]).finally(() => clearTimeout(timer));
+}
 
-const app = express();
-app.use(cors());
-app.set("trust proxy", true);
-
-/* ================= CONFIG ================= */
-const PORT = process.env.PORT || 3000;
-const CACHE_TIME = 1000 * 60 * 20;
-
-/* ================= CACHE ================= */
-const cache = new Map();
-
-function getCache(key) {
-  const item = cache.get(key);
-  if (!item) return null;
-
-  if (Date.now() - item.t > CACHE_TIME) {
-    cache.delete(key);
-    return null;
+/* ================= SAFE RESPONSE ================= */
+function safeSend(res, data) {
+  if (!res.headersSent) {
+    res.json(data);
   }
-
-  return item.d;
 }
 
-function setCache(key, data) {
-  if (cache.size > 500) {
-    const firstKey = cache.keys().next().value;
-    cache.delete(firstKey);
-  }
-
-  cache.set(key, { d: data, t: Date.now() });
-}
-
-/* ================= USER AGENTS ================= */
-const USER_AGENTS = [
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-  "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)",
-  "Mozilla/5.0 (Linux; Android 12)",
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
-];
-
-function getHeaders() {
-  return {
-    "User-Agent": USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)],
-    "Accept-Language": "en-US,en;q=0.9"
-  };
-}
-
-/* ================= PLATFORM DETECT ================= */
-function detectPlatform(url) {
-  if (/tiktok\.com/.test(url)) return "tiktok";
-  if (/instagram\.com/.test(url)) return "instagram";
-  if (/youtube\.com|youtu\.be/.test(url)) return "youtube";
-  return "web";
-}
-
-/* ================= FETCH LAYERS ================= */
-async function fetchDirect(url) {
+/* ================= ROUTE ================= */
+app.get("/api/rip", async (req, res) => {
   try {
-    const { data } = await axios.get(url, {
-      headers: getHeaders(),
-      timeout: 7000
-    });
-    return data;
-  } catch {
-    return null;
-  }
-}
+    await withTimeout(handleRequest(req, res), 20000);
+  } catch (err) {
+    console.log("❌ TIMEOUT:", err.message);
 
-async function fetchProxy(url) {
+    safeSend(res, {
+      success: false,
+      error: "Request timed out"
+    });
+  }
+});
+
+/* ================= MAIN HANDLER ================= */
+async function handleRequest(req, res) {
   try {
-    const proxy = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-    const { data } = await axios.get(proxy, {
-      headers: getHeaders(),
-      timeout: 9000
+    let { url } = req.query;
+    if (!url) {
+      return safeSend(res, { success: false, error: "No URL provided" });
+    }
+
+    if (!url.startsWith("http")) {
+      url = "https://" + url;
+    }
+
+    /* CACHE */
+    const cached = getCache(url);
+    if (cached) {
+      return safeSend(res, cached);
+    }
+
+    const platform = detectPlatform(url);
+    let data = null;
+
+    /* ================= YOUTUBE ================= */
+    if (platform === "youtube") {
+      try {
+        const { data: yt } = await axios.get(
+          `https://www.youtube.com/oembed?url=${url}&format=json`,
+          { timeout: 5000 }
+        );
+
+        data = {
+          title: yt.title,
+          image: yt.thumbnail_url,
+          author: yt.author_name
+        };
+      } catch (e) {
+        console.log("YouTube fetch failed");
+      }
+    }
+
+    /* ================= WEB SCRAPE ================= */
+    if (!data) {
+      const html = await smartFetch(url);
+
+      if (!html) {
+        return safeSend(res, {
+          success: false,
+          error: "Failed to fetch HTML"
+        });
+      }
+
+      try {
+        const m = await metascraper({ html, url });
+
+        data = {
+          title: m.title || "No title",
+          description: m.description || "",
+          image: m.image || null
+        };
+      } catch (e) {
+        console.log("Metascraper failed");
+
+        data = {
+          title: "Parse failed",
+          description: "",
+          image: null
+        };
+      }
+    }
+
+    const response = {
+      success: true,
+      platform,
+      metadata: data
+    };
+
+    setCache(url, response);
+    safeSend(res, response);
+
+  } catch (err) {
+    console.log("❌ HANDLE ERROR:", err.message);
+
+    safeSend(res, {
+      success: false,
+      error: "Internal error"
     });
-    return data;
-  } catch {
-    return null;
   }
 }
 
-function needsBrowser(html) {
-  if (!html) return true;
-
-  const blocked = [
-    "captcha",
-    "enable javascript",
-    "access denied",
-    "verify you are human"
-  ];
-
-  return (
-    html.length < 1200 ||
-    blocked.some(x => html.toLowerCase().includes(x))
-  );
-}
-
-/* ================= BROWSER FALLBACK ================= */
+/* ================= BROWSER FETCH ================= */
 async function fetchWithBrowser(url) {
+  let browser;
+
   try {
     const chromium = require("@sparticuz/chromium");
     const puppeteer = require("puppeteer-core");
 
-    const browser = await puppeteer.launch({
+    browser = await puppeteer.launch({
       args: chromium.args,
       executablePath: await chromium.executablePath(),
-      headless: chromium.headless
+      headless: true
     });
 
     const page = await browser.newPage();
@@ -126,105 +143,61 @@ async function fetchWithBrowser(url) {
 
     await page.goto(url, {
       waitUntil: "domcontentloaded",
-      timeout: 15000
+      timeout: 12000
     });
 
     const html = await page.content();
-
-    await browser.close();
-
     return html;
-  } catch (e) {
+
+  } catch (err) {
+    console.log("Browser fetch failed:", err.message);
     return null;
+  } finally {
+    if (browser) {
+      try {
+        await browser.close();
+      } catch {}
+    }
   }
 }
 
-/* ================= SMART FETCH ENGINE ================= */
+/* ================= RETRY ================= */
+async function retry(fn, attempts = 2) {
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fn();
+      if (res) return res;
+    } catch {}
+  }
+  return null;
+}
+
+/* ================= SMART FETCH ================= */
 async function smartFetch(url) {
-  let html = await fetchDirect(url);
+  let html = await retry(() => fetchDirect(url));
 
   if (!html) {
-    html = await fetchProxy(url);
+    html = await retry(() => fetchProxy(url));
   }
 
   if (needsBrowser(html)) {
-    html = await fetchWithBrowser(url);
+    html = await retry(() => fetchWithBrowser(url));
   }
 
   return html;
 }
 
-/* ================= API ROUTE ================= */
-app.get("/api/rip", async (req, res) => {
-  try {
-    let { url } = req.query;
-    if (!url) return res.json({ success: false });
+/* ================= DETECT NEED BROWSER ================= */
+function needsBrowser(html) {
+  if (!html) return true;
 
-    if (!url.startsWith("http")) {
-      url = "https://" + url;
-    }
+  const text = html.toLowerCase();
 
-    /* CACHE */
-    const cached = getCache(url);
-    if (cached) {
-      return res.json(cached);
-    }
-
-    const platform = detectPlatform(url);
-
-    let data = null;
-
-    /* PLATFORM LOGIC */
-    if (platform === "youtube") {
-      const { data: yt } = await axios.get(
-        `https://www.youtube.com/oembed?url=${url}&format=json`
-      );
-
-      data = {
-        title: yt.title,
-        image: yt.thumbnail_url,
-        author: yt.author_name
-      };
-    }
-
-    /* WEB FALLBACK */
-    if (!data) {
-      const html = await smartFetch(url);
-
-      let meta = { title: "Unknown" };
-
-      if (html) {
-        try {
-          const m = await metascraper({ html, url });
-          meta = {
-            title: m.title,
-            description: m.description,
-            image: m.image
-          };
-        } catch {}
-      }
-
-      data = meta;
-    }
-
-    const response = {
-      success: true,
-      platform,
-      metadata: data
-    };
-
-    setCache(url, response);
-
-    res.json(response);
-  } catch (e) {
-    res.json({
-      success: false,
-      error: e.message
-    });
-  }
-});
-
-/* ================= START ================= */
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+  return (
+    html.length < 1500 ||
+    text.includes("enable javascript") ||
+    text.includes("captcha") ||
+    text.includes("access denied") ||
+    text.includes("verify you are human")
+  );
+}
