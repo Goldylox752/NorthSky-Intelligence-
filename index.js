@@ -12,8 +12,11 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-/* ================= STRIPE ================= */
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+/* ================= SAFE STRIPE INIT ================= */
+let stripe = null;
+if (process.env.STRIPE_SECRET_KEY) {
+  stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+}
 
 /* ================= CACHE ================= */
 const cache = new LRU({
@@ -21,7 +24,7 @@ const cache = new LRU({
   ttl: 1000 * 60 * 60 * 3
 });
 
-/* ================= USERS DB (demo memory) ================= */
+/* ================= USERS DB ================= */
 const users = new Map();
 
 /* ================= PLANS ================= */
@@ -37,24 +40,25 @@ function auth(req) {
   if (!token) return null;
 
   try {
-    return jwt.verify(token, process.env.JWT_SECRET);
+    return jwt.verify(token, process.env.JWT_SECRET || "dev_secret");
   } catch {
     return null;
   }
 }
 
-/* ================= RATE LIMIT PER USER ================= */
+/* ================= USAGE ================= */
 function checkUsage(user) {
   const u = users.get(user.id);
   if (!u) return false;
 
   const now = Date.now();
+
   if (now - u.reset > 3600000) {
     u.used = 0;
     u.reset = now;
   }
 
-  const limit = PLANS[u.plan].limit;
+  const limit = PLANS[u.plan]?.limit || 50;
 
   if (u.used >= limit) return false;
 
@@ -67,10 +71,9 @@ async function fetchHTML(url) {
   try {
     const { data } = await axios.get(url, {
       timeout: 6000,
-      headers: {
-        "User-Agent": "Mozilla/5.0"
-      }
+      headers: { "User-Agent": "Mozilla/5.0" }
     });
+
     return data;
   } catch {
     return null;
@@ -89,7 +92,8 @@ function parse(html, url) {
   const description =
     $("meta[property='og:description']").attr("content") ||
     $("meta[name='description']").attr("content") ||
-    $("p").first().text().slice(0, 200);
+    $("p").first().text().slice(0, 200) ||
+    "";
 
   const image =
     $("meta[property='og:image']").attr("content") || null;
@@ -110,7 +114,10 @@ async function engine(url) {
   const html = await fetchHTML(url);
 
   if (!html) {
-    return { success: false };
+    return {
+      success: false,
+      error: "fetch_failed"
+    };
   }
 
   return {
@@ -132,94 +139,106 @@ app.post("/signup", (req, res) => {
 
   users.set(id, user);
 
-  const token = jwt.sign({ id }, process.env.JWT_SECRET);
+  const token = jwt.sign(
+    { id },
+    process.env.JWT_SECRET || "dev_secret"
+  );
 
-  res.json({
-    token,
-    plan: "free"
-  });
+  res.json({ token, plan: "free" });
 });
 
-/* ================= STRIPE CHECKOUT ================= */
+/* ================= STRIPE (SAFE) ================= */
 app.post("/upgrade", async (req, res) => {
   const user = auth(req);
   if (!user) return res.json({ error: "unauthorized" });
 
-  const session = await stripe.checkout.sessions.create({
-    payment_method_types: ["card"],
-    mode: "payment",
-    line_items: [
-      {
-        price_data: {
-          currency: "usd",
-          product_data: {
-            name: "Pro Plan"
-          },
-          unit_amount: 999
-        },
-        quantity: 1
-      }
-    ],
-    success_url: process.env.BASE_URL + "/success",
-    cancel_url: process.env.BASE_URL + "/cancel"
-  });
+  if (!stripe) {
+    return res.json({
+      error: "stripe_not_configured"
+    });
+  }
 
-  res.json({ url: session.url });
+  try {
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card"],
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: { name: "Pro Plan" },
+            unit_amount: 999
+          },
+          quantity: 1
+        }
+      ],
+      success_url: process.env.BASE_URL || "http://localhost:3000",
+      cancel_url: process.env.BASE_URL || "http://localhost:3000"
+    });
+
+    res.json({ url: session.url });
+  } catch (e) {
+    res.json({ error: "stripe_error" });
+  }
 });
 
 /* ================= MAIN API ================= */
 app.get("/api/rip", async (req, res) => {
-  const user = auth(req);
+  try {
+    const user = auth(req);
+    if (!user) return res.json({ error: "invalid_token" });
 
-  if (!user) {
-    return res.json({ error: "invalid_token" });
-  }
+    let profile = users.get(user.id);
 
-  const profile = users.get(user.id);
-  if (!profile) return res.json({ error: "no_user" });
+    if (!profile) {
+      profile = {
+        id: user.id,
+        plan: "free",
+        used: 0,
+        reset: Date.now()
+      };
 
-  /* CHECK USAGE */
-  if (!checkUsage(profile)) {
-    return res.json({ error: "limit_reached" });
-  }
-
-  let { url } = req.query;
-  if (!url) return res.json({ error: "no_url" });
-
-  if (!url.startsWith("http")) url = "https://" + url;
-
-  const cacheKey = crypto.createHash("md5").update(url).digest("hex");
-
-  const cached = cache.get(cacheKey);
-  if (cached) return res.json(cached);
-
-  const result = await engine(url);
-
-  const response = {
-    ...result,
-    usage: {
-      plan: profile.plan,
-      used: profile.used,
-      limit: PLANS[profile.plan].limit
+      users.set(user.id, profile);
     }
-  };
 
-  cache.set(cacheKey, response);
+    if (!checkUsage(profile)) {
+      return res.json({ error: "limit_reached" });
+    }
 
-  res.json(response);
-});
+    let { url } = req.query;
+    if (!url) return res.json({ error: "no_url" });
 
-/* ================= DASHBOARD ================= */
-app.get("/me", (req, res) => {
-  const user = auth(req);
-  if (!user) return res.json({ error: "unauthorized" });
+    if (!url.startsWith("http")) url = "https://" + url;
 
-  const profile = users.get(user.id);
+    const key = crypto.createHash("md5").update(url).digest("hex");
 
-  res.json(profile);
+    const cached = cache.get(key);
+    if (cached) return res.json(cached);
+
+    const result = await engine(url);
+
+    const response = {
+      ...result,
+      usage: {
+        plan: profile.plan,
+        used: profile.used,
+        limit: PLANS[profile.plan].limit
+      }
+    };
+
+    cache.set(key, response);
+
+    res.json(response);
+
+  } catch (err) {
+    res.json({
+      success: false,
+      error: "server_error"
+    });
+  }
 });
 
 /* ================= START ================= */
 app.listen(PORT, () => {
-  console.log("💼 FULL SAAS PRODUCT RUNNING ON PORT", PORT);
+  console.log("💼 SAFE SAAS RUNNING ON PORT", PORT);
 });
